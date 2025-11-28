@@ -93,7 +93,7 @@ class Node:
 
     def backpropagate(self, winner: Colour):
         self.visits += 1 
-        if self.colour == self.root_colour:
+        if winner == self.root_colour:
             self.wins += 1
         if self.parent:
             self.parent.backpropagate(winner)
