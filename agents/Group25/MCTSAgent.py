@@ -10,6 +10,7 @@ from src.Tile import Tile
 from math import sqrt, inf, log
 from copy import deepcopy
 from random import choice, random
+from time import perf_counter  # NEW
 
 
 class Node:
@@ -182,14 +183,24 @@ class Node:
             self.parent.backpropagate(winner)
 
     # TODO: make search time based to fit with time constraints of CW
-    def search(self, iterations):
-        for i in range(iterations):
-            print("Iteration", i)
+    def search(self, time_limit: float):
+        """Run MCTS until the given time budget (in seconds) is exhausted."""
+        start = perf_counter()
+        i = 0
+        while True:
+            # always do at least one iteration
+            if i > 0 and perf_counter() - start >= time_limit:
+                break
+
+            # one MCTS iteration
             node = self.select()
             if node.untried_moves:
                 node = node.expand()
             winner = node.simulate()
             node.backpropagate(winner)
+
+            i += 1
+            print("Iteration", i)
 
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child.move
@@ -225,32 +236,12 @@ class MCTSAgent(AgentBase):
             Move: The agent's move
         """
 
-        # rows = board.tiles
-        # board_strings = []
-        # for row in rows:
-        #     row_string = ""
-        #     for tile in row:
-        #         colour = tile.colour
-        #         if colour is None:
-        #             t = "0"
-        #         else:
-        #             t = colour.get_char()
-        #         row_string += t
-        #     board_strings.append(row_string)
-        # board_string = ",".join(board_strings)
-        #
-        # if opp_move is None:
-        #     command = f"START;;{board_string};{turn};"
-        # elif opp_move.x == -1 and opp_move.y == -1:
-        #     command = f"SWAP;;{board_string};{turn};"
-        # else:
-        #     command = f"CHANGE;{opp_move.x},{opp_move.y};{board_string};{turn};"
-        #
-        # self.agent_process.stdin.write(command + "\n")
-        # self.agent_process.stdin.flush()
-
         root = Node(self.colour, opp_move, None, board, self.colour)
-        iterations = 20
-        response = root.search(iterations)
+
+        # time-based search instead of fixed iterations
+        # tune
+        time_limit = 0.3  # seconds
+
+        response = root.search(time_limit)
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
