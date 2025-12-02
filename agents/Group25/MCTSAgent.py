@@ -9,7 +9,8 @@ from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
 from copy import deepcopy
-from random import choice
+from random import choice, random
+
 
 class Node:
     def __init__(self, colour: Colour, move: Move, parent, board: Board, root_colour: Colour):
@@ -41,6 +42,81 @@ class Node:
                     moves.append(Move(x, y))
         return moves
 
+    def _neighbours(self, board: Board, x: int, y: int):
+        """Return neighbour coordinates using Hex adjacency."""
+        dirs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, 1), (1, -1)]
+        max_x = len(board.tiles)
+        max_y = len(board.tiles[0]) if max_x > 0 else 0
+        for dx, dy in dirs:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < max_x and 0 <= ny < max_y:
+                yield nx, ny
+
+    def _bridge_score(self, board: Board, move: Move, colour: Colour) -> float:
+        """
+        Local heuristic: prefer moves that
+        - touch own stones (extend connections)
+        - touch opponent stones (good for blocking)
+        - take part in small 'bridge-like' patterns.
+        """
+        x, y = move.x, move.y
+        opp = Colour.opposite(colour)
+
+        own_neighbours = 0
+        opp_neighbours = 0
+        empty_neighbours = []
+
+        # Count neighbours by type
+        for nx, ny in self._neighbours(board, x, y):
+            tile = board.tiles[nx][ny]
+            if tile.colour == colour:
+                own_neighbours += 1
+            elif tile.colour == opp:
+                opp_neighbours += 1
+            else:
+                empty_neighbours.append((nx, ny))
+
+        # Base score: extend own groups (3) and block opponent (2)
+        score = 3 * own_neighbours + 2 * opp_neighbours
+
+        # Very simple "bridge" approximation:
+        # if two empty neighbours share an own-colour neighbour,
+        # reward this move as sitting in a locally strong pattern.
+        if own_neighbours > 0 and len(empty_neighbours) >= 2:
+            own_neighs_sets = []
+            for ex, ey in empty_neighbours:
+                s = set()
+                for nx, ny in self._neighbours(board, ex, ey):
+                    tile = board.tiles[nx][ny]
+                    if tile.colour == colour:
+                        s.add((nx, ny))
+                own_neighs_sets.append(s)
+
+            # If any two empties share an own-neighbour, give a small bonus
+            for i in range(len(own_neighs_sets)):
+                for j in range(i + 1, len(own_neighs_sets)):
+                    if own_neighs_sets[i] & own_neighs_sets[j]:
+                        score += 1.0
+
+        return score
+
+    def _choose_bridge_move(self, board: Board, moves, colour: Colour) -> Move:
+        """Pick a move biased by the local bridge heuristic."""
+        best_score = -inf
+        best_moves = []
+
+        for m in moves:
+            s = self._bridge_score(board, m, colour)
+            if s > best_score:
+                best_score = s
+                best_moves = [m]
+            elif s == best_score:
+                best_moves.append(m)
+
+        if not best_moves:
+            return choice(moves)
+        return choice(best_moves)
+
     def ucb(self, child: Node):
         if child.visits == 0:
             return inf
@@ -51,7 +127,7 @@ class Node:
 
     def select(self):
         # TODO: What if there are multiple children of the same UCB? The selection might not be truly random. It might also be worth it to implement a heuristic for this
-        
+
         # If there are no untried moves, iterate until a child with untried moves is reached
         node = self
         while not node.untried_moves and node.children:
@@ -64,13 +140,14 @@ class Node:
         # TODO: deepcopy is very slow
         new_board = deepcopy(self.board)
         # Make move on board
-        new_board.set_tile_colour(move.x, move.y, self.colour) 
-        new_node = Node(Colour.opposite(self.colour), move, self, new_board, self.root_colour)
+        new_board.set_tile_colour(move.x, move.y, self.colour)
+        new_node = Node(Colour.opposite(self.colour), move,
+                        self, new_board, self.root_colour)
         self.children.append(new_node)
         return new_node
 
     def simulate(self):
-        # While the game hasn't ended, keep on playing random moves 
+        # While the game hasn't ended, keep on playing random moves
         # TODO: Add a heuristic to select non-random moves
 
         # TODO: again deepcopy here is very slow
@@ -84,13 +161,21 @@ class Node:
                 return Colour.BLUE
 
             moves = self.legal_moves(new_board)
-            
-            move = choice(moves)
+            if not moves:
+                # No legal moves left: treat as loss for current player
+                return Colour.opposite(colour)
+
+            # mostly bridge-biased playouts, sometimes pure random for exploration
+            if random() < 0.8:
+                move = self._choose_bridge_move(new_board, moves, colour)
+            else:
+                move = choice(moves)
+
             new_board.set_tile_colour(move.x, move.y, colour)
             colour = Colour.opposite(colour)
 
     def backpropagate(self, winner: Colour):
-        self.visits += 1 
+        self.visits += 1
         if winner == self.root_colour:
             self.wins += 1
         if self.parent:
@@ -108,6 +193,7 @@ class Node:
 
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child.move
+
 
 class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
