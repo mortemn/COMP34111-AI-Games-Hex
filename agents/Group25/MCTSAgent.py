@@ -203,13 +203,14 @@ class Node:
             print("Iteration", i)
 
         best_child = max(self.children, key=lambda x: x.visits)
-        return best_child.move
+        return best_child  # NOTE: now returns Node, not Move
 
 
 class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
+        self.root_node: Node | None = None  # NEW persistent tree root
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -226,22 +227,45 @@ class MCTSAgent(AgentBase):
         If the opponent has made a move, opp_move will contain the opponent's move.
         If the opponent has made a swap move, opp_move will contain a Move object with x=-1 and y=-1,
         the game engine will also change your colour to the opponent colour.
-
-        Args:
-            turn (int): The current turn
-            board (Board): The current board state
-            opp_move (Move | None): The opponent's last move
-
-        Returns:
-            Move: The agent's move
         """
 
-        root = Node(self.colour, opp_move, None, board, self.colour)
+        # New game or swap → reset tree
+        if turn == 1:
+            self.root_node = None
+        if opp_move is not None and opp_move.x == -1 and opp_move.y == -1:
+            self.root_node = None
+
+        # If we have an existing tree, advance it using the opponent's move
+        if self.root_node is not None and opp_move is not None:
+            matching_child = None
+            for child in self.root_node.children:
+                if child.move is not None and child.move.x == opp_move.x and child.move.y == opp_move.y:
+                    matching_child = child
+                    break
+
+            if matching_child is not None:
+                # detach old tree above and reuse this subtree as new root
+                matching_child.parent = None
+                self.root_node = matching_child
+            else:
+                # tree out of sync with actual game → rebuild
+                self.root_node = None
+
+        # If no usable tree, build a fresh root from current board
+        if self.root_node is None:
+            self.root_node = Node(self.colour, opp_move,
+                                  None, board, self.colour)
+        else:
+            # keep stats, but make sure board and root_colour match current state
+            self.root_node.board = board
+            self.root_node.root_colour = self.colour
 
         # time-based search instead of fixed iterations
-        # tune
-        time_limit = 0.3  # seconds
+        time_limit = 0.3  # seconds; tune as needed / with deepcopy optimisation
 
-        response = root.search(time_limit)
-        # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
-        return response
+        best_child = self.root_node.search(time_limit)
+        # prepare tree for next move: root becomes the node corresponding to our chosen move
+        best_child.parent = None
+        self.root_node = best_child
+
+        return best_child.move
