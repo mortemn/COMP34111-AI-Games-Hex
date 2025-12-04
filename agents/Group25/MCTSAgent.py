@@ -164,7 +164,7 @@ class MCTSAgent(AgentBase):
         # self.agent_process.stdin.flush()
 
         root = Node(self.colour, opp_move, None, board, self.colour)
-        iterations = 20
+        iterations = 1000
         response = root.search(iterations)
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
