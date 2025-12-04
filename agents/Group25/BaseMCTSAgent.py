@@ -1,5 +1,6 @@
 from __future__ import annotations
 import subprocess
+import time
 
 from src.Colour import Colour
 from src.AgentBase import AgentBase
@@ -112,6 +113,7 @@ class BaseMCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
+        self.average_time = 0
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -163,7 +165,14 @@ class BaseMCTSAgent(AgentBase):
         # self.agent_process.stdin.flush()
 
         root = Node(self.colour, opp_move, None, board, self.colour)
-        iterations = 10
+        iterations = 50
+        start_time = time.time()
         response = root.search(iterations)
+        end_time = time.time()
+        if self.average_time == 0:
+            self.average_time = end_time - start_time
+        else:
+            self.average_time = (self.average_time + (end_time - start_time)) / 2
+        logger.info(f"Unoptimized MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
