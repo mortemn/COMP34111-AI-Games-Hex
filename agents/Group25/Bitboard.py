@@ -20,11 +20,11 @@ def precompute(size):
 
 MASKS = precompute(11)
 
-def row_mask(size, y):
-    return sum(1 << (x * size + y) for x in range(size))
-
-def col_mask(size, x):
+def row_mask(size, x):
     return sum(1 << (x * size + y) for y in range(size))
+
+def col_mask(size, y):
+    return sum(1 << (x * size + y) for x in range(size))
 
 TOP_MASK = row_mask(11, 0)
 BOTTOM_MASK = row_mask(11, 10)
