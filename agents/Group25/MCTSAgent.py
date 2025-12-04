@@ -158,7 +158,7 @@ class MCTSAgent(AgentBase):
             
 
         root = Node(self.colour, opp_move, None, convert_bitboard(board), self.colour)
-        iterations = 50
+        iterations = 200
         start_time = time.time()
         response = root.search(iterations)
         end_time = time.time()
