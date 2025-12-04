@@ -4,7 +4,7 @@ import subprocess
 from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
-from agents.Group25.Bitboard import Bitboard, convert_bitboard
+from src.Board import Board
 from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
@@ -12,7 +12,7 @@ from copy import deepcopy
 from random import choice
 
 class Node:
-    def __init__(self, colour: Colour, move: Move, parent, board: Bitboard, root_colour: Colour):
+    def __init__(self, colour: Colour, move: Move, parent, board: Board, root_colour: Colour):
         # Colour to move in the current turn
         self.colour = colour
         # Last move that was made
@@ -28,10 +28,18 @@ class Node:
         # Children of current node
         self.children = []
         # Untried moves of current node
-        self.untried_moves = board.legal_moves()
+        self.untried_moves = self.legal_moves(board)
         self.root_colour = root_colour
         # Exploration parameter - can be tuned
         self.c = sqrt(2)
+
+    def legal_moves(self, board: Board):
+        moves = []
+        for x, col in enumerate(board.tiles):
+            for y, tile in enumerate(col):
+                if tile.colour is None:
+                    moves.append(Move(x, y))
+        return moves
 
     def ucb(self, child: Node):
         if child.visits == 0:
@@ -54,9 +62,9 @@ class Node:
         # Make a random move from selected node
         move = self.untried_moves.pop()
         # TODO: deepcopy is very slow
-        new_board = self.board.copy()
+        new_board = deepcopy(self.board)
         # Make move on board
-        new_board.move_at(move[0], move[1], self.colour) 
+        new_board.set_tile_colour(move.x, move.y, self.colour) 
         new_node = Node(Colour.opposite(self.colour), move, self, new_board, self.root_colour)
         self.children.append(new_node)
         return new_node
@@ -66,19 +74,19 @@ class Node:
         # TODO: Add a heuristic to select non-random moves
 
         # TODO: again deepcopy here is very slow
-        new_board = self.board.copy()
+        new_board = deepcopy(self.board)
         colour = self.colour
 
         while True:
-            if new_board.red_won():
+            if new_board.has_ended(Colour.RED):
                 return Colour.RED
-            if new_board.blue_won():
+            if new_board.has_ended(Colour.BLUE):
                 return Colour.BLUE
 
-            moves = new_board.legal_moves()
+            moves = self.legal_moves(new_board)
             
             move = choice(moves)
-            new_board.move_at(move[0], move[1], colour)
+            new_board.set_tile_colour(move.x, move.y, colour)
             colour = Colour.opposite(colour)
 
     def backpropagate(self, winner: Colour):
@@ -90,7 +98,7 @@ class Node:
 
     # TODO: make search time based to fit with time constraints of CW
     def search(self, iterations):
-        for _ in range(iterations):
+        for i in range(iterations):
             node = self.select()
             if node.untried_moves:
                 node = node.expand()
@@ -98,9 +106,9 @@ class Node:
             node.backpropagate(winner)
 
         best_child = max(self.children, key=lambda x: x.visits)
-        return Move(best_child.move[0], best_child.move[1])
+        return best_child.move
 
-class MCTSAgent(AgentBase):
+class BaseMCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
@@ -154,12 +162,8 @@ class MCTSAgent(AgentBase):
         # self.agent_process.stdin.write(command + "\n")
         # self.agent_process.stdin.flush()
 
-        # Convert board to internal representation
-        # for row in board.tiles:
-            
-
-        root = Node(self.colour, opp_move, None, convert_bitboard(board), self.colour)
-        iterations = 50
+        root = Node(self.colour, opp_move, None, board, self.colour)
+        iterations = 10
         response = root.search(iterations)
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
