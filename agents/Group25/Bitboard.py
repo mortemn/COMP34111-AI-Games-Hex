@@ -79,7 +79,7 @@ class Bitboard():
         return moves
 
     def copy(self):
-        return Bitboard(self.size)
+        return Bitboard(self.size, self.red, self.blue)
 
     def red_won(self):
         red = self.red

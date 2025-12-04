@@ -1,5 +1,6 @@
 from __future__ import annotations
 import subprocess
+import time
 
 from src.Colour import Colour
 from src.AgentBase import AgentBase
@@ -8,7 +9,6 @@ from agents.Group25.Bitboard import Bitboard, convert_bitboard
 from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
-from copy import deepcopy
 from random import choice
 
 class Node:
@@ -53,7 +53,6 @@ class Node:
     def expand(self):
         # Make a random move from selected node
         move = self.untried_moves.pop()
-        # TODO: deepcopy is very slow
         new_board = self.board.copy()
         # Make move on board
         new_board.move_at(move[0], move[1], self.colour) 
@@ -65,7 +64,6 @@ class Node:
         # While the game hasn't ended, keep on playing random moves 
         # TODO: Add a heuristic to select non-random moves
 
-        # TODO: again deepcopy here is very slow
         new_board = self.board.copy()
         colour = self.colour
 
@@ -104,6 +102,7 @@ class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
+        self.average_time = 0
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -160,6 +159,14 @@ class MCTSAgent(AgentBase):
 
         root = Node(self.colour, opp_move, None, convert_bitboard(board), self.colour)
         iterations = 50
+        start_time = time.time()
         response = root.search(iterations)
+        end_time = time.time()
+        if self.average_time == 0:
+            self.average_time = end_time - start_time
+        else:
+            self.average_time = (self.average_time + (end_time - start_time)) / 2
+        logger.info(f"Bitboard MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
+
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
