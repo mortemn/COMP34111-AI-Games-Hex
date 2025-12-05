@@ -171,6 +171,7 @@ class MCTSAgent(AgentBase):
         super().__init__(colour)
         self.time_used = 0
         self.total_iterations = 0
+        self.root = None
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -224,31 +225,66 @@ class MCTSAgent(AgentBase):
         # Convert board to internal representation
         # for row in board.tiles:
 
-        if opp_move is not None:
-            root = Node(self.colour, (opp_move.x, opp_move.y), None, convert_bitboard(board), self.colour)
+            
+        bitboard = convert_bitboard(board)
+        if self.root is None:
+            self.root = Node(self.colour, None, None, bitboard, self.colour)
         else:
-            root = Node(self.colour, None, None, convert_bitboard(board), self.colour)
+            if opp_move is not None:
+                if opp_move.x != -1:
+                    found = False
+                    target = (opp_move.x, opp_move.y)
+                    for child in self.root.children:
+                        if child.move == target:
+                            found = True
+                            logger.debug("FOUND")
+                            old_parent = child.parent
+                            self.root = child
+                            # Free references
+                            if old_parent is not None:
+                                old_parent.children = []
+                                self.root.parent = None
+                            self.root.board = bitboard
+                            break
+                    if found == False:
+                        self.root = Node(self.colour, None, None, bitboard, self.colour)
+                    else:
+                        # Pie rule used, easiest approach is to rebuild the Node, this can be improved
+                        self.root = Node(self.colour, None, None, bitboard, self.colour)
+                else:
+                    # Fallback condition, which probably also means we are red on the first move
+                    self.root = Node(self.colour, None, None, bitboard, self.colour)
+                
 
         time_remaining = max(0.0, TIME_LIMIT - self.time_used)
 
         if time_remaining < 10:
             # If we're in time trouble, allocate at most 0.05 seconds per move
+            if time_remaining <= 0.01:
+                move_limit = 0.01
             move_limit = 0.05
         else:
             # Early game
             if turn < 10:
-                move_limit = 3.0
+                base = 3.0
             # Mid game
             elif turn < 30:
-                move_limit = 2.0
+                base = 2.0
             # End game
             else:
-                move_limit = 1.0
+                base = 1.0
+
+            # Conservation time usage
+            move_limit = min(base, time_remaining / 2.0)
 
 
         start_time = time.time()
-        best_child, response, iterations = root.search(move_limit)
+        best_child, response, iterations = self.root.search(move_limit)
         end_time = time.time()
+
+        self.root = best_child
+        self.root.parent.children = []
+        self.root.parent = None
 
         time_spent = end_time - start_time
         self.time_used += time_spent
