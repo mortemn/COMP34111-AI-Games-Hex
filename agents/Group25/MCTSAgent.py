@@ -1,4 +1,5 @@
 from __future__ import annotations
+import random
 import subprocess
 import time
 
@@ -10,6 +11,8 @@ from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
 from random import choice
+
+C_EXPLORATION = sqrt(2)
 
 class Node:
     def __init__(self, colour: Colour, move: Move, parent, board: Bitboard, root_colour: Colour):
@@ -30,13 +33,11 @@ class Node:
         # Untried moves of current node
         self.untried_moves = board.legal_moves()
         self.root_colour = root_colour
-        # Exploration parameter - can be tuned
-        self.c = sqrt(2)
 
     def ucb(self, child: Node):
         if child.visits == 0:
             return inf
-        return (child.wins/child.visits) + self.c * sqrt(log(self.visits)/child.visits)
+        return (child.wins/child.visits) + C_EXPLORATION * sqrt(log(self.visits)/child.visits)
 
     def best_child(self):
         return max(self.children, key=lambda x: self.ucb(x))
@@ -66,17 +67,25 @@ class Node:
 
         new_board = self.board.copy()
         colour = self.colour
+        moves = new_board.legal_moves()
 
         while True:
-            if new_board.red_won():
-                return Colour.RED
-            if new_board.blue_won():
-                return Colour.BLUE
+            if not moves:
+                return Colour.RED if new_board.red_won() else Colour.BLUE
 
-            moves = new_board.legal_moves()
+            idx = random.randrange(len(moves))
+            x, y = moves.pop(idx)
             
-            move = choice(moves)
-            new_board.move_at(move[0], move[1], colour)
+            new_board.move_at(x, y, colour)
+
+            # Only check for win from the previous player's color, reduces checks by half
+            if colour == Colour.RED:
+                if new_board.red_won():
+                    return Colour.RED
+            else:
+                if new_board.blue_won():
+                    return Colour.BLUE
+
             colour = Colour.opposite(colour)
 
     def backpropagate(self, winner: Colour):
@@ -158,7 +167,7 @@ class MCTSAgent(AgentBase):
             
 
         root = Node(self.colour, opp_move, None, convert_bitboard(board), self.colour)
-        iterations = 200
+        iterations = 2000
         start_time = time.time()
         response = root.search(iterations)
         end_time = time.time()
@@ -166,7 +175,7 @@ class MCTSAgent(AgentBase):
             self.average_time = end_time - start_time
         else:
             self.average_time = (self.average_time + (end_time - start_time)) / 2
-        logger.info(f"Bitboard MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
+        logger.log(10, f"Bitboard MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
 
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response

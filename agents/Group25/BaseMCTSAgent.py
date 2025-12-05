@@ -1,6 +1,7 @@
 from __future__ import annotations
 import subprocess
 import time
+from agents.Group25.Bitboard import Bitboard, convert_bitboard
 
 from src.Colour import Colour
 from src.AgentBase import AgentBase
@@ -173,6 +174,6 @@ class BaseMCTSAgent(AgentBase):
             self.average_time = end_time - start_time
         else:
             self.average_time = (self.average_time + (end_time - start_time)) / 2
-        logger.info(f"Unoptimized MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
+        logger.log(10, f"Unoptimized MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
