@@ -146,37 +146,50 @@ def bridge_score(board: Bitboard, colour: Colour, move: tuple[int, int]) -> int:
 
 
 class Node:
-    def __init__(self, colour: Colour, move: tuple[int, int] | None, parent, board: Bitboard, root_colour: Colour, depth: int = 0):
+    def __init__(
+        self,
+        colour: Colour,
+        move: tuple[int, int] | None,
+        parent,
+        board: Bitboard,
+        root_colour: Colour,
+        depth: int = 0,
+    ):
         # Colour to move in the current turn
         self.colour: Colour = colour
         # Last move that was made
         self.move: tuple[int, int] | None = move
         # Parent of the current node
         self.parent = parent
-        # Board position the current node represents, expressed by class Board
+        # Board position the current node represents, expressed by class Bitboard
         self.board = board
-        # Number of vists to the current node via search
+        # Number of visits to the current node via search
         self.visits = 0
         # Number of wins for simulations consisting of this node
         self.wins = 0
         # Children of current node
-        self.children = []
-        # Untried moves of current node (bridge ordered)
-        moves = board.legal_moves()
-        if moves:
-            # bridge aware move ordering
-            scored = [(bridge_score(board, root_colour, m), m) for m in moves]
-            scored.sort(key=lambda t: t[0], reverse=True)
-            self.untried_moves = [m for _, m in scored]
-        else:
-            self.untried_moves = []
+        self.children: list[Node] = []
+
         self.root_colour = root_colour
         self.depth = depth
 
+        # RAVE stats
         self.rave_wins: dict[tuple[int, int], float] = {}
         self.rave_visits: dict[tuple[int, int], int] = {}
 
-    def ucb(self, child: Node):
+        moves = board.legal_moves()
+        if not moves:
+            self.untried_moves = []
+        else:
+            scored = [
+                (bridge_score(board, self.colour, m), random.random(), m)
+                for m in moves
+            ]
+            # Sort by (bridge_score, random_tiebreak) descending
+            scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+            self.untried_moves = [m for _, _, m in scored]
+
+    def ucb(self, child: "Node"):
         # Explore unvisited children
         if child.visits == 0:
             return inf
@@ -185,9 +198,10 @@ class Node:
         q_uct = (child.wins + 1) / (child.visits + 2)
 
         # UCT exploration
-        uct_exp = C_EXPLORATION * sqrt(log(self.visits + 1)/child.visits)
+        uct_exp = C_EXPLORATION * sqrt(log(self.visits + 1) / child.visits)
 
-        # Explanation for child.move is None: currently in our implementation, there is no scenario where the root node is passed to ucb, but to be safe, this check is here
+        # Explanation for child.move is None: currently in our implementation,
+        # there is no scenario where the root node is passed to ucb, but to be safe, this check is here
         if self.depth >= RAVE_MAX_DEPTH or child.move is None:
             # This is normal UCT without RAVE
             return q_uct + uct_exp
@@ -209,8 +223,6 @@ class Node:
         return max(self.children, key=lambda x: self.ucb(x))
 
     def select(self):
-        # TODO: What if there are multiple children of the same UCB? The selection might not be truly random. It might also be worth it to implement a heuristic for this
-
         # If there are no untried moves, iterate until a child with untried moves is reached
         node = self
         while not node.untried_moves and node.children:
@@ -218,20 +230,24 @@ class Node:
         return node
 
     def expand(self):
-        # Make a random move from selected node (but pulled from bridge-ordered list)
+        # Make a move from selected node (from bridge-ordered list / shuffled list)
         move = self.untried_moves.pop()
         new_board = self.board.copy()
         # Make move on board
         new_board.move_at(move[0], move[1], self.colour)
-        new_node = Node(Colour.opposite(self.colour), move, self,
-                        new_board, self.root_colour, self.depth + 1)
+        new_node = Node(
+            Colour.opposite(self.colour),
+            move,
+            self,
+            new_board,
+            self.root_colour,
+            self.depth + 1,
+        )
         self.children.append(new_node)
         return new_node
 
     def simulate(self):
-        # While the game hasn't ended, keep on playing random moves
-        # TODO: Add a heuristic to select non-random moves
-
+        # Pure random rollout (keep it simple & robust for now)
         new_board = self.board.copy()
         colour = self.colour
 
@@ -239,7 +255,6 @@ class Node:
 
         while True:
             moves = new_board.legal_moves()
-            # Should not possibly happen but just in case
             if not moves:
                 if new_board.red_won():
                     return Colour.RED, trace
@@ -252,7 +267,6 @@ class Node:
             new_board.move_at(x, y, colour)
             trace.append((colour, (x, y)))
 
-            # Only check for win from the previous player's color, reduces checks by half
             if colour == Colour.RED:
                 if new_board.red_won():
                     return Colour.RED, trace
@@ -273,7 +287,6 @@ class Node:
                 # Update the number of visits for this move
                 self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
                 wins_before = self.rave_wins.get(move, 0.0)
-                # Win is updated depending on whether or not this move's colour is same as root
                 if winner == self.root_colour:
                     self.rave_wins[move] = wins_before + 1.0
                 else:
@@ -282,7 +295,6 @@ class Node:
         if self.parent:
             self.parent.backpropagate(winner, trace)
 
-    # TODO: make search time based to fit with time constraints of CW
     def search(self, limit):
         stop_time = time.time() + limit
         iterations = 0
