@@ -7,6 +7,7 @@ from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
 from agents.Group25.Bitboard import Bitboard, convert_bitboard
+from agents.Group25.OpeningBook import OpeningBook
 from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
@@ -172,6 +173,7 @@ class MCTSAgent(AgentBase):
         self.time_used = 0
         self.total_iterations = 0
         self.root = None
+        self.opening_book = OpeningBook(colour)
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -225,6 +227,8 @@ class MCTSAgent(AgentBase):
         # Convert board to internal representation
         # for row in board.tiles:
 
+        if self.opening_book.in_book(turn, opp_move):
+            return self.opening_book.play_move(turn, opp_move)
             
         bitboard = convert_bitboard(board)
         if self.root is None:
