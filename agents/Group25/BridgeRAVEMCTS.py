@@ -4,6 +4,7 @@ import subprocess
 import time
 from collections import defaultdict
 
+from src import Board
 from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
@@ -328,11 +329,12 @@ class MCTSAgent(AgentBase):
         #     bufsize=1
         # )
 
-    def make_move(self, turn: int, board: Bitboard, opp_move: Move | None) -> Move:
+    def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         """The game engine will call this method to request a move from the agent.
         If the agent is to make the first move, opp_move will be None.
         If the opponent has made a move, opp_move will contain the opponent's move.
         If the opponent has made a swap move, opp_move will contain a Move object with x=-1 and y=-1,
+
         the game engine will also change your colour to the opponent colour.
 
         Args:
