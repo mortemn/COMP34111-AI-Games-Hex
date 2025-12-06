@@ -166,8 +166,12 @@ class BaseMCTSAgent(AgentBase):
         # self.agent_process.stdin.flush()
 
         root = Node(self.colour, opp_move, None, board, self.colour)
+<<<<<<< HEAD:agents/Group25/MCTSAgent.py
+        iterations = 1000
+=======
         iterations = 50
         start_time = time.time()
+>>>>>>> main:agents/Group25/BaseMCTSAgent.py
         response = root.search(iterations)
         end_time = time.time()
         if self.average_time == 0:
