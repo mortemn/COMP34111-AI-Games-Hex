@@ -149,14 +149,14 @@ def find_forced_win(board: Bitboard, colour: Colour):
     for move in board.legal_moves():
         board.move_at(move[0], move[1], colour)
         
-        if colour == Colour.RED and board.red_won():
-            board.undo_at(move[0], move[1], colour)
-            return move
-        elif colour == Colour.BLUE and board.blue_won():
-            board.undo_at(move[0], move[1], colour)
+        won = (colour == Colour.RED and board.red_won()) or (colour == Colour.BLUE and board.blue_won())
+
+        board.undo_at(move[0], move[1], colour)
+
+        if won:
             return move
         
-        return None
+    return None
 
 def find_opp_forced_win(board: Bitboard, colour: Colour):
     opp_colour = Colour.opposite(colour)
@@ -397,12 +397,12 @@ class MCTSAgent(AgentBase):
         if self.opening_book.in_book(turn, opp_move):
             return self.opening_book.play_move(turn, opp_move)
 
-        if len(bitboard.legal_moves()) <= 25 or time_remaining > 8.0:
-            forced_win = find_forced_win(convert_bitboard(board), self.colour)
+        if len(bitboard.legal_moves()) <= 25 and time_remaining > 8.0:
+            forced_win = find_forced_win(bitboard, self.colour)
             if forced_win is not None:
                 return Move(forced_win[0], forced_win[1])
 
-            threats = find_opp_forced_win(convert_bitboard(board), self.colour)
+            threats = find_opp_forced_win(bitboard, self.colour)
             if len(threats) == 1:
                 return Move(threats[0][0], threats[0][1])
 
