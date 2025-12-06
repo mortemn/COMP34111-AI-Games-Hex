@@ -67,6 +67,13 @@ class Bitboard():
         elif colour == Colour.BLUE:
             self.blue |= b
 
+    def undo_at(self, x: int, y: int, colour: Colour):
+        b = self.bit(x, y)
+        if colour == Colour.RED:
+            self.red &= ~b
+        elif colour == Colour.BLUE:
+            self.blue &= ~b
+
     def legal_moves(self):
         moves = []
         s = self.size * self.size
