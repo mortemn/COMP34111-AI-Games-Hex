@@ -1,5 +1,7 @@
 from __future__ import annotations
 import subprocess
+import time
+from agents.Group25.Bitboard import Bitboard, convert_bitboard
 
 from src.Colour import Colour
 from src.AgentBase import AgentBase
@@ -99,7 +101,6 @@ class Node:
     # TODO: make search time based to fit with time constraints of CW
     def search(self, iterations):
         for i in range(iterations):
-            print("Iteration", i)
             node = self.select()
             if node.untried_moves:
                 node = node.expand()
@@ -109,10 +110,11 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child.move
 
-class MCTSAgent(AgentBase):
+class BaseMCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
+        self.average_time = 0
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -164,7 +166,18 @@ class MCTSAgent(AgentBase):
         # self.agent_process.stdin.flush()
 
         root = Node(self.colour, opp_move, None, board, self.colour)
+<<<<<<< HEAD:agents/Group25/MCTSAgent.py
         iterations = 1000
+=======
+        iterations = 50
+        start_time = time.time()
+>>>>>>> main:agents/Group25/BaseMCTSAgent.py
         response = root.search(iterations)
+        end_time = time.time()
+        if self.average_time == 0:
+            self.average_time = end_time - start_time
+        else:
+            self.average_time = (self.average_time + (end_time - start_time)) / 2
+        logger.log(10, f"Unoptimized MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
