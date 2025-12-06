@@ -2,7 +2,18 @@ from src.Colour import Colour
 from src.Move import Move
 from random import choice
 
-RED_FIRST_MOVES = [Move(5, 7), Move(6, 5), Move(6, 6), Move(4, 4)]
+RED_FIRST_MOVES = [Move(6, 6), Move(5, 6), Move(6, 5), Move(4, 4), Move(4, 5), Move(5, 4)]
+BLUE_CLAIM_MOVES = [Move(5, 5), Move(5, 6), Move(6, 5), Move(6, 6)]
+BLUE_COUNTERS = {
+    Move(5, 7): Move(6, 5),
+    Move(5, 3): Move(4, 5),
+    Move(7, 5): Move(6, 6),
+    Move(3, 5): Move(5, 4),
+    Move(4, 6): Move(6, 5),
+    Move(6, 6): Move(4, 5),
+    Move(6, 4): Move(5, 6),
+    Move(4, 4): Move(6, 5)
+}
 
 # Very minimal opening book implementation
 class OpeningBook():
@@ -30,7 +41,14 @@ class OpeningBook():
             return choice(RED_FIRST_MOVES)
         if turn == 2 and self.colour == Colour.BLUE:
             d = self.dist_from_center(last_move)
-            if d <= 2:
+            if d <= 1:
                 return Move(-1, -1)
+
+            if d == 2:
+                move = BLUE_COUNTERS.get(last_move, choice(BLUE_CLAIM_MOVES))
+                if move:
+                    return move
+
             if d >= 3:
-                return Move(5, 5)
+                return choice(BLUE_CLAIM_MOVES)
+        return Move(5, 5)
