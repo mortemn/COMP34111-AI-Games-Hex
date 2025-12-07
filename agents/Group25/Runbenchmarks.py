@@ -2,17 +2,16 @@
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from agents.Group25.Benchmarksuite import run_matches, round_robin_elos
-from agents.Group25.EndgameMCTS import EndgameMCTSAgent
-from agents.Group25.RAVEMCTSAgent import MCTSAgent as RAVEMCTSAgent
-from agents.Group25.RootParallelMCTSAgent import RootParallelMCTSAgent
+from Benchmarksuite import run_matches, round_robin_elos
+from RAVEMCTSAgent import MCTSAgent
+from ReuseAndRAVE import MCTSAgent as ReuseAndRAVEMCTSAgent
+from IntegrateBridge import MCTSAgent as BridgeMCTSAgent
+from EndgameMCTS import MCTSAgent as EndgameMCTSAgent
 
 if __name__ == "__main__":
-    print("Starting benchmark\n")
-
-    # HEAD-TO-HEAD
-    agent1 = EndgameMCTSAgent
-    agent2 = RAVEMCTSAgent   
+    print("Starting quick benchmark.")
+    agent1 = BridgeMCTSAgent
+    agent2 = BridgeMCTSAgent
 
     results = run_matches(
         agent1_class=agent1,
