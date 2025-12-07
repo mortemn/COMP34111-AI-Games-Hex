@@ -5,15 +5,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from Benchmarksuite import run_matches, round_robin_elos
 from RAVEMCTSAgent import MCTSAgent
 from ReuseAndRAVE import MCTSAgent as ReuseAndRAVEMCTSAgent
-from IntegrateBridge import MCTSAgent as BridgeMCTSAgent
+from IntegrateBridge import IntegratedAgent
 from EndgameMCTS import EndgameMCTSAgent as EndgameMCTSAgent
 from HeuMCTS import HeuMCTSAgent
 from TunedHeuristics import TunedMCTSAgent as TunedHeuristicMCTSAgent
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = HeuMCTSAgent
-    agent2 = TunedHeuristicMCTSAgent
+    agent1 = EndgameMCTSAgent
+    agent2 = IntegratedAgent
 
     results = run_matches(
         agent1_class=agent1,

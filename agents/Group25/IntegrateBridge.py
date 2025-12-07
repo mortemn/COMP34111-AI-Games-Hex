@@ -7,6 +7,7 @@ from collections import defaultdict
 from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
+from src.Board import Board
 from agents.Group25.Bitboard import Bitboard, convert_bitboard
 from agents.Group25.OpeningBook import OpeningBook
 from src.Game import logger
@@ -22,6 +23,7 @@ RAVE_MAX_DEPTH = 7
 # Measured in seconds, represents the maximum time allowed for whole game
 TIME_LIMIT = 3 * 60
 
+BRIDGE_ORDER_MAX_DEPTH = 2
 BRIDGE_COMPLETE_SCORE = 3
 BRIDGE_POTENTIAL_SCORE = 1
 
@@ -195,13 +197,17 @@ class Node:
         if not moves:
             self.untried_moves = []
         else:
-            scored = [
-                (bridge_score(board, self.colour, m), random.random(), m)
-                for m in moves
-            ]
-            # Sort by (bridge_score, random_tiebreak) descending
-            scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-            self.untried_moves = [m for _, _, m in scored]
+            if depth <= BRIDGE_ORDER_MAX_DEPTH:
+                scored = [
+                    (bridge_score(board, self.colour, m), random.random(), m)
+                    for m in moves
+                ]
+                # Sort by (bridge_score, random_tiebreak) descending
+                scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+                self.untried_moves = [m for _, _, m in scored]
+            else:
+                random.shuffle(moves)
+                self.untried_moves = moves
 
         self.root_colour = root_colour
         self.depth = depth
@@ -330,7 +336,7 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
-class MCTSAgent(AgentBase):
+class IntegratedAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
