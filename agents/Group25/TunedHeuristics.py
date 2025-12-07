@@ -19,10 +19,10 @@ C_EXPLORATION = 0.7
 RAVE_CONSTANT = 700
 RAVE_MAX_DEPTH = 7
 
-
 # Measured in seconds, represents the maximum time allowed for whole game
 TIME_LIMIT = 3 * 60
 
+BRIDGE_ORDER_MAX_DEPTH = 2
 BRIDGE_COMPLETE_SCORE = 3
 BRIDGE_POTENTIAL_SCORE = 1
 
@@ -201,13 +201,19 @@ class Node:
         if not moves:
             self.untried_moves = []
         else:
-            scored = [
-                (bridge_score(board, self.colour, m), random.random(), m)
-                for m in moves
-            ]
-            # Sort by (bridge_score, random_tiebreak) descending
-            scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-            self.untried_moves = [m for _, _, m in scored]
+            # Bridge score is quite expensive to compute, only use it for shallower nodes
+            if depth <= BRIDGE_ORDER_MAX_DEPTH:
+                scored = [
+                    (bridge_score(board, self.colour, m), random.random(), m)
+                    for m in moves
+                ]
+                # Sort by (bridge_score, random_tiebreak) descending
+                scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+                self.untried_moves = [m for _, _, m in scored]
+            # At deeper nodes, just random shuffle, a lot cheaper
+            else:
+                random.shuffle(moves)
+                self.untried_moves = moves
 
         self.root_colour = root_colour
         self.depth = depth
@@ -290,14 +296,16 @@ class Node:
 
             if playout_depth < 15:               # EARLY
                 LOCAL_PROB = 0.40
-                FRIEND_PROB = 0.10
             elif playout_depth < 40:             # MIDGAME
                 LOCAL_PROB = 0.75
-                FRIEND_PROB = 0.15
             else:                                 # LATE
                 LOCAL_PROB = 0.30
-                FRIEND_PROB = 0.05
             # (Remaining probability is pure random)
+
+            if len(moves) <= 30:
+                FRIEND_PROB = 0.10
+            else:
+                FRIEND_PROB = 0.05
 
             # local move heuristic
             if last_move is not None and random.random() < LOCAL_PROB:
@@ -344,15 +352,22 @@ class Node:
             colour = Colour.opposite(colour)
             playout_depth += 1
 
-    def backpropagate(self, winner: Colour, trace):
-        self.visits += 1
+    def backpropagate(self, winner: Colour, trace: list[tuple[Colour, tuple[int, int]]]):
+        self.visits += 1 
         if winner == self.root_colour:
             self.wins += 1
 
-        for move_colour, move in trace:
-            self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
-            if move_colour == winner:
-                self.rave_wins[move] = self.rave_wins.get(move, 0) + 1
+        # Update RAVE stats
+        for colour, move in trace:
+            if colour == self.colour:
+                # Update the number of visits for this move
+                self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
+                wins_before = self.rave_wins.get(move, 0.0)
+                # Win is updated depending on whether or not this move's colour is same as root
+                if winner == self.root_colour:
+                    self.rave_wins[move] = wins_before + 1.0
+                else:
+                    self.rave_wins[move] = wins_before
 
         if self.parent:
             self.parent.backpropagate(winner, trace)
@@ -374,7 +389,7 @@ class Node:
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
 
-class HeuMCTSAgent(AgentBase):
+class TunedMCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
@@ -441,7 +456,7 @@ class HeuMCTSAgent(AgentBase):
         if self.opening_book.in_book(turn, opp_move):
             return self.opening_book.play_move(turn, opp_move)
 
-        if len(bitboard.legal_moves()) <= 25 and time_remaining > 8.0:
+        if len(bitboard.legal_moves()) <= 30 and time_remaining > 10.0:
             forced_win = find_forced_win(bitboard, self.colour)
             if forced_win is not None:
                 return Move(forced_win[0], forced_win[1])
@@ -462,7 +477,6 @@ class HeuMCTSAgent(AgentBase):
                     for child in self.root.children:
                         if child.move == target:
                             found = True
-                            logger.debug("FOUND")
                             old_parent = child.parent
                             self.root = child
                             # Free references
@@ -518,8 +532,8 @@ class HeuMCTSAgent(AgentBase):
         self.total_iterations += iterations
 
         logger.log(
-            10, f"RAVEMCTSAgent iterations per second: {self.total_iterations / self.time_used}")
-        logger.log(10, f"RAVEMCTSAgent time used so far: {self.time_used}")
+            10, f"{self.colour} iterations per second: {self.total_iterations / self.time_used}")
+        logger.log(10, f"{self.colour} time used so far: {self.time_used}")
 
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response

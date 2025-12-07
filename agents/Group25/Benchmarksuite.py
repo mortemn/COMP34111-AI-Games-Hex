@@ -11,12 +11,6 @@ def _apply_move_board(board: Board, move: Move, colour: Colour):
 
     x, y = move.x, move.y
 
-    if x == -1 and y == -1:
-        if hasattr(board, "swap_sides"):
-            board.swap_sides()
-            return
-        raise ValueError("Swap requested but board.swap_sides() unavailable")
-
     if not (0 <= x < board.size and 0 <= y < board.size):
         raise ValueError(f"Move out of bounds: {(x,y)}")
 
@@ -25,18 +19,7 @@ def _apply_move_board(board: Board, move: Move, colour: Colour):
     if tile.colour is not None:
         raise ValueError(f"Tile already occupied at {(x,y)}")
     
-    if hasattr(board, "set_tile_colour"):
-        board.set_tile_colour(x, y, colour)
-    else:
-        if hasattr(board, "move_at"):
-            board.move_at(x, y, colour)
-        elif hasattr(board, "apply_move"):
-            try:
-                board.apply_move(x, y, colour)
-            except TypeError:
-                board.apply_move(move, colour)
-        else:
-            raise AttributeError("Board lacks set_tile_colour/move_at/apply_move")
+    board.set_tile_colour(x, y, colour)
 
     if board.tiles[x][y].colour != colour:
         raise RuntimeError(f"Move application failed: tile {(x,y)} not set to {colour}")
@@ -54,6 +37,7 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
     other_agent = a2
     opp_move = None
     turn = 1
+    swapped = False
 
     if turn_cap is None:
         turn_cap = board_size * board_size + 10
@@ -65,27 +49,25 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
         except Exception as e:
             if verbose:
                 print(f"[T{turn}] ERROR: agent threw exception in make_move: {e}")
-            return "BLUE" if current_agent.colour == Colour.RED else "RED"
+            return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
         dur = time.time() - start
-
-        if verbose:
-            print(f"[T{turn}] {current_agent.__class__.__name__} ({Colour.get_char(current_agent.colour)}) -> {getattr(move,'x',None)},{getattr(move,'y',None)} ({dur:.3f}s)")
 
         if move is None:
             if verbose:
                 print("Agent returned None -> opponent wins")
-            return "BLUE" if current_agent.colour == Colour.RED else "RED"
+            return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+
+        if verbose:
+            print(f"[T{turn}] {current_agent.__class__.__name__} ({Colour.get_char(current_agent.colour)}) -> {getattr(move,'x',None)},{getattr(move,'y',None)} ({dur:.3f}s)")
 
         # handle swap
         if move.x == -1 and move.y == -1:
-            if hasattr(board, "swap_sides"):
-                board.swap_sides()
-                if hasattr(a1, "colour"):
-                    a1.colour, a2.colour = a2.colour, a1.colour
-            else:
-                if verbose:
-                    print("Swap requested but board.swap_sides() unavailable -> illegal")
-                return "BLUE" if current_agent.colour == Colour.RED else "RED"
+            if turn != 2:
+                return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+
+            a1.colour, a2.colour = a2.colour, a1.colour
+            swapped = True
+
         else:
             # Try to apply move and catch any problem
             try:
@@ -93,16 +75,16 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
             except Exception as e:
                 if verbose:
                     print("Error applying move:", e)
-                return "BLUE" if current_agent.colour == Colour.RED else "RED"
+                return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
 
         try:
             if board.has_ended(Colour.RED):
-                return "RED"
+                return "RED", swapped
             if board.has_ended(Colour.BLUE):
-                return "BLUE"
+                return "BLUE", swapped
         except Exception:
             if hasattr(board, "get_winner") and board.get_winner() is not None:
-                return "RED" if board.get_winner() == Colour.RED else "BLUE"
+                return "RED", swapped if board.get_winner() == Colour.RED else "BLUE"
 
         # prepare next turn
         opp_move = move
@@ -122,7 +104,8 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
                             blue_count += 1
             if verbose:
                 print("Turn cap reached; deciding by piece counts:", red_count, blue_count)
-            return "RED" if red_count >= blue_count else "BLUE"
+            return "RED", swapped if red_count >= blue_count else "BLUE", swapped
+
 def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False):
     
     results = {"agent1": 0, "agent2": 0}
@@ -135,26 +118,38 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
     for i in range(games_as_p1_red):
         if verbose:
             print(f"=== Game {i+1}/{games} (agent1=Red, agent2=Blue) ===")
-        winner = play_single_game(agent1_class, agent2_class,
+        winner, swapped = play_single_game(agent1_class, agent2_class,
                                   board_size=board_size, verbose=verbose)
-        if winner == "RED":
-            results["agent1"] += 1
+        if not swapped:
+            if winner == "RED":
+                results["agent1"] += 1
+            else:
+                results["agent2"] += 1
         else:
-            results["agent2"] += 1
+            if winner == "RED":
+                results["agent2"] += 1
+            else:
+                results["agent1"] += 1
 
     # Phase 2: agent2 = Red, agent1 = Blue
     for i in range(games_as_p2_red):
         if verbose:
             print(f"=== Game {games_as_p1_red + i + 1}/{games} "
                   f"(agent2=Red, agent1=Blue) ===")
-        winner = play_single_game(agent2_class, agent1_class,
+        winner, swapped = play_single_game(agent2_class, agent1_class,
                                   board_size=board_size, verbose=verbose)
-        if winner == "RED":
-            # Red is agent2 in this phase
-            results["agent2"] += 1
+        if not swapped:
+            if winner == "RED":
+                # Red is agent2 in this phase
+                results["agent2"] += 1
+            else:
+                # Blue is agent1 in this phase
+                results["agent1"] += 1
         else:
-            # Blue is agent1 in this phase
-            results["agent1"] += 1
+            if winner == "RED":
+                results["agent1"] += 1
+            else:
+                results["agent2"] += 1
 
     return results
 
