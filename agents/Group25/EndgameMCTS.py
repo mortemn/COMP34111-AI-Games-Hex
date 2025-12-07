@@ -195,7 +195,7 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
-class EndgameMCTSAgent(AgentBase):
+class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
