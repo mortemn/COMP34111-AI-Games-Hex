@@ -36,6 +36,9 @@ class Bitboard():
         self.size = size
         self.red = red
         self.blue = blue
+        self.empty_cells = set((x, y) for x in range(size) for y in range(size))
+        self.red_moves = 0
+        self.blue_moves = 0
 
     def index(self, x: int, y: int):
         return x * self.size + y
@@ -64,29 +67,35 @@ class Bitboard():
         b = self.bit(x, y)
         if colour == Colour.RED:
             self.red |= b
+            self.red_moves += 1
         elif colour == Colour.BLUE:
             self.blue |= b
+            self.blue_moves += 1
+        self.empty_cells.discard((x, y))
 
     def undo_at(self, x: int, y: int, colour: Colour):
         b = self.bit(x, y)
         if colour == Colour.RED:
             self.red &= ~b
+            self.red_moves -= 1
         elif colour == Colour.BLUE:
             self.blue &= ~b
+            self.blue_moves -= 1
+        self.empty_cells.add((x, y))
+
+    def red_can_win(self):
+        return self.red_moves >= self.size - 1
+
+    def blue_can_win(self):
+        return self.blue_moves >= self.size - 1
 
     def legal_moves(self):
-        moves = []
-        s = self.size * self.size
-        occupied = self.occupied()
-
-        for i in range(s):
-            if not occupied & (1 << i):
-                moves.append(self.coord(i))
-
-        return moves
+        return list(self.empty_cells)
 
     def copy(self):
-        return Bitboard(self.size, self.red, self.blue)
+        new_board = Bitboard(self.size, self.red, self.blue)
+        new_board.empty_cells = self.empty_cells.copy()
+        return new_board
 
     def red_won(self):
         red = self.red
@@ -142,15 +151,22 @@ class Bitboard():
 
 def convert_bitboard(board: Board):
     size = board.size
-    bitboard = Bitboard(size)
+    red = 0
+    blue = 0
+    empty_cells = set()
 
     for x in range(size):
         for y in range(size):
             tile = board.tiles[x][y]
+            idx = x * size + y
 
             if tile.colour == Colour.RED:
-                bitboard.red |= bitboard.bit(x, y)
+                red |= 1 << idx
             elif tile.colour == Colour.BLUE:
-                bitboard.blue |= bitboard.bit(x, y)
+                blue |= 1 << idx
+            else:
+                empty_cells.add((x, y))
 
+    bitboard = Bitboard(size, red, blue)
+    bitboard.empty_cells = empty_cells
     return bitboard

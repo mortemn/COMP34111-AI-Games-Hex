@@ -2,6 +2,7 @@ from __future__ import annotations
 import random
 import subprocess
 import time
+from collections import defaultdict
 
 from src.Colour import Colour
 from src.AgentBase import AgentBase
@@ -21,7 +22,7 @@ RAVE_CONSTANT = 700
 RAVE_MAX_DEPTH = 7
 
 # Ordering
-MAX_ORDER_DEPTH = 2
+MAX_ORDER_DEPTH = 1
 LOCALITY_D1 = 10
 LOCALITY_D2 = 5
 
@@ -145,8 +146,6 @@ def time_allocator(turn: int, board: Bitboard, time_remaining: float):
 
     return move_time
 
-
-
 class Node:
     def __init__(self, colour: Colour, move: tuple[int, int] | None, parent, board: Bitboard, root_colour: Colour, depth: int = 0):
         # Colour to move in the current turn
@@ -182,8 +181,8 @@ class Node:
                 random.shuffle(moves)
                 self.untried_moves = moves
 
-        self.rave_wins: dict[tuple[int, int], float] = {}
-        self.rave_visits: dict[tuple[int, int], int] = {}
+        self.rave_wins: dict[tuple[int, int], float] = defaultdict(float)
+        self.rave_visits: dict[tuple[int, int], int] = defaultdict(int)
 
     def ucb(self, child: Node, root_depth: int):
         # Explore unvisited children
@@ -203,8 +202,8 @@ class Node:
             return q_uct + uct_exp
 
         # Calculate RAVE value
-        rave_n = self.rave_visits.get(child.move, 0)
-        rave_w = self.rave_wins.get(child.move, 0)
+        rave_n = self.rave_visits[child.move]
+        rave_w = self.rave_wins[child.move]
 
         # RAVE estimate with Bayesian smoothing
         q_rave = (rave_w + 1) / (rave_n + 2)
@@ -248,25 +247,29 @@ class Node:
         move_stack = []
         playout_depth = 0
         last_move = self.move
-        size = new_board.size
 
         legal_moves = new_board.legal_moves()
+        seed = random.randrange(9999999999999999)
 
         try:
             while legal_moves:
                 if playout_depth <= 15:
-                    LOCAL_PROB = 0.3
+                    LOCAL_PROB = 30
                     # ADJ_PROB = 0.1
                 elif playout_depth <= 35:
-                    LOCAL_PROB = 0.6
+                    LOCAL_PROB = 60
                     # ADJ_PROB = 0.2
                 else:
-                    LOCAL_PROB = 0.25
+                    LOCAL_PROB = 25
                     # ADJ_PROB = 0.1
 
                 move = None
+
+                # Somewhat random
+                use_local = (hash((seed, playout_depth)) % 100) < LOCAL_PROB
+
                 # Local move heuristic
-                if last_move is not None and random.random() < LOCAL_PROB:
+                if last_move is not None and use_local:
                     lx, ly = last_move
                     local = []
                     for dx, dy in NEIGBOUR_OFFSETS:
@@ -274,7 +277,10 @@ class Node:
                         if 0 <= nx < size and 0 <= ny < size and (nx, ny) in legal_moves:
                             local.append((nx, ny))
                     if local:
-                        move = random.choice(local)
+                        index = hash((seed, playout_depth, lx, ly)) % len(local)
+                        move = local[index]
+                        legal_moves.remove(move)
+
                 
                 # Adjacency heuristic
                 # if move is None and random.random() < ADJ_PROB:
@@ -291,8 +297,8 @@ class Node:
                 #         move = random.choice(adjacent)
 
                 if move is None:
-                    idx = random.randrange(len(legal_moves))
-                    move = legal_moves.pop(idx)
+                    index = hash((seed, playout_depth)) % len(legal_moves)
+                    move = legal_moves.pop(index)
                 
                 new_board.move_at(move[0], move[1], colour)
                 move_stack.append((move, colour))
@@ -300,15 +306,19 @@ class Node:
 
                 # Only check for win from the previous player's color, reduces checks by half
                 if colour == Colour.RED:
-                    if new_board.red_won():
+                    if new_board.red_can_win() and new_board.red_won():
                         return Colour.RED, trace
                 else:
-                    if new_board.blue_won():
+                    if new_board.blue_can_win() and new_board.blue_won():
                         return Colour.BLUE, trace
 
                 last_move = move
                 playout_depth += 1
                 colour = Colour.opposite(colour)
+            if new_board.red_won():
+                return Colour.RED, trace
+            else:
+                return Colour.BLUE, trace
         finally:
             for move, colour in reversed(move_stack):
                 new_board.undo_at(move[0], move[1], colour)
@@ -322,10 +332,10 @@ class Node:
         for colour, move in trace:
             if colour == self.colour:
                 # Update the number of visits for this move
-                self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
+                self.rave_visits[move] += 1
                 # Win is updated depending on whether or not this move's colour is same as root
                 if winner == self.root_colour:
-                    self.rave_wins[move] = self.rave_wins.get(move, 0) + 1.0
+                    self.rave_wins[move] += 1.0
 
         if self.parent:
             self.parent.backpropagate(winner, trace)
