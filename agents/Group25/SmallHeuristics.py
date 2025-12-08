@@ -310,12 +310,9 @@ class Node:
             if colour == self.colour:
                 # Update the number of visits for this move
                 self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
-                wins_before = self.rave_wins.get(move, 0.0)
                 # Win is updated depending on whether or not this move's colour is same as root
                 if winner == self.root_colour:
-                    self.rave_wins[move] = wins_before + 1.0
-                else:
-                    self.rave_wins[move] = wins_before
+                    self.rave_wins[move] = self.rave_wins.get(move, 0) + 1.0
 
         if self.parent:
             self.parent.backpropagate(winner, trace)
