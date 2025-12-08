@@ -7,6 +7,7 @@ from collections import defaultdict
 from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
+from src.Board import Board
 from agents.Group25.Bitboard import Bitboard, convert_bitboard
 from agents.Group25.OpeningBook import OpeningBook
 from src.Game import logger
