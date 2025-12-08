@@ -7,6 +7,7 @@ from src.Colour import Colour
 from src.AgentBase import AgentBase
 from src.Move import Move
 from agents.Group25.Bitboard import Bitboard, convert_bitboard
+from agents.Group25.OpeningBook import OpeningBook
 from src.Game import logger
 from src.Tile import Tile
 from math import sqrt, inf, log
@@ -16,9 +17,90 @@ C_EXPLORATION = 0.7
 RAVE_CONSTANT = 700
 RAVE_MAX_DEPTH = 7
 
+MAX_ORDER_DEPTH = 2
+LOCALITY_D1 = 10
+LOCALITY_D2 = 5
 
 # Measured in seconds, represents the maximum time allowed for whole game
 TIME_LIMIT = 3 * 60
+
+NEIGBOUR_OFFSETS = [(-1, -1), (-1, 0), (-1, 1),
+                    (0, -1),          (0, 1),
+                    (1, -1),  (1, 0), (1, 1)]
+
+# Moves that are closed to opponent's last move are prioritised
+def locality(opp_move: tuple[int, int], candidate_move: tuple[int, int]):
+    dx = abs(opp_move[0] - candidate_move[0])
+    dy = abs(opp_move[1] - candidate_move[1])
+
+    if (dx, dy) in [(0, 1), (1, 0), (1, 1)]:
+        return LOCALITY_D1
+    elif max(dx, dy) <= 2:
+        return LOCALITY_D2
+
+    return 0
+
+# Moves that neighbour other stones are prioritised
+def adjacency(board: Bitboard, candidate_colour: Colour, candidate_move: tuple[int, int]):
+    x, y = candidate_move
+    score = 0
+
+    for dx, dy in NEIGBOUR_OFFSETS:
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < board.size and 0 <= ny < board.size:
+            if board.colour_at(nx, ny) == candidate_colour:
+                score += 3
+            elif board.colour_at(nx, ny) == Colour.opposite(candidate_colour):
+                score += 2
+
+    return score
+
+# Moves closer to the centre are prioritised
+def centrality(board: Bitboard, candidate_move: tuple[int, int]):
+    center = (board.size - 1) / 2
+    x, y = candidate_move
+    dist = abs(x - center) + abs(y - center)
+    return -int(dist)
+
+def score_move(board: Bitboard, colour: Colour, candidate_move: tuple[int, int], opp_move: tuple[int, int] | None):
+    score = 0
+
+    if opp_move is not None:
+        score += locality(opp_move, candidate_move)
+
+    score += adjacency(board, colour, candidate_move)
+    score += centrality(board, candidate_move)
+
+    return score
+
+def find_forced_win(board: Bitboard, colour: Colour):
+    for move in board.legal_moves():
+        board.move_at(move[0], move[1], colour)
+        
+        won = (colour == Colour.RED and board.red_won()) or (colour == Colour.BLUE and board.blue_won())
+
+        board.undo_at(move[0], move[1], colour)
+
+        if won:
+            return move
+        
+    return None
+
+def find_opp_forced_win(board: Bitboard, colour: Colour):
+    opp_colour = Colour.opposite(colour)
+    wins = []
+
+    for move in board.legal_moves():
+        board.move_at(move[0], move[1], opp_colour)
+        
+        if opp_colour == Colour.RED and board.red_won():
+            wins.append(move)
+        elif opp_colour == Colour.BLUE and board.blue_won():
+            wins.append(move)
+        
+        board.undo_at(move[0], move[1], opp_colour)
+
+    return wins
 
 def time_allocator(turn: int, board: Bitboard, time_remaining: float):
     if time_remaining <= 0.01:
@@ -59,6 +141,8 @@ def time_allocator(turn: int, board: Bitboard, time_remaining: float):
 
     return move_time
 
+
+
 class Node:
     def __init__(self, colour: Colour, move: tuple[int, int] | None, parent, board: Bitboard, root_colour: Colour, depth: int = 0):
         # Colour to move in the current turn
@@ -76,9 +160,23 @@ class Node:
         # Children of current node
         self.children = []
         # Untried moves of current node
-        self.untried_moves = board.legal_moves()
         self.root_colour = root_colour
         self.depth = depth
+        moves = board.legal_moves()
+        if not moves:
+            self.untried_moves = []
+        else:
+            if depth <= MAX_ORDER_DEPTH:
+                scored_moves = []
+                for move in moves:
+                    score = score_move(board, colour, move, parent.move if parent else None)
+                    # Add a random tiebreaker
+                    scored_moves.append((score, random.random(), move))
+                scored_moves.sort(reverse=True, key=lambda x: (x[0], x[1]))
+                self.untried_moves = [move for _, _, move in scored_moves]
+            else:
+                random.shuffle(moves)
+                self.untried_moves = moves
 
         self.rave_wins: dict[tuple[int, int], float] = {}
         self.rave_visits: dict[tuple[int, int], int] = {}
@@ -204,13 +302,14 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
-class ReuseMCTS(AgentBase):
+class OrderedMCTS(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
         self.time_used = 0
         self.total_iterations = 0
         self.root = None
+        self.opening_book = OpeningBook(colour)
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -264,8 +363,23 @@ class ReuseMCTS(AgentBase):
         # Convert board to internal representation
         # for row in board.tiles:
 
-            
+        time_remaining = max(0.0, TIME_LIMIT - self.time_used)
         bitboard = convert_bitboard(board)
+
+        if self.opening_book.in_book(turn, opp_move):
+            return self.opening_book.play_move(turn, opp_move)
+
+        if len(bitboard.legal_moves()) <= 25 and time_remaining > 8.0:
+            forced_win = find_forced_win(bitboard, self.colour)
+            if forced_win is not None:
+                return Move(forced_win[0], forced_win[1])
+
+            threats = find_opp_forced_win(bitboard, self.colour)
+            if len(threats) == 1:
+                return Move(threats[0][0], threats[0][1])
+
+        # If len(threats) > 1, cry
+            
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
         else:
@@ -293,9 +407,6 @@ class ReuseMCTS(AgentBase):
             else:
                 # Fallback condition, which probably also means we are red on the first move
                 self.root = Node(self.colour, None, None, bitboard, self.colour)
-                
-
-        time_remaining = max(0.0, TIME_LIMIT - self.time_used)
 
         move_limit = time_allocator(turn, bitboard, time_remaining)
 

@@ -49,13 +49,21 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
         except Exception as e:
             if verbose:
                 print(f"[T{turn}] ERROR: agent threw exception in make_move: {e}")
-            return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+            if current_agent.colour == Colour.RED:
+                winner = "BLUE"
+            else:
+                winner = "RED"
+            return winner, swapped
         dur = time.time() - start
 
         if move is None:
             if verbose:
                 print("Agent returned None -> opponent wins")
-            return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+            if current_agent.colour == Colour.RED:
+                winner = "BLUE"
+            else:
+                winner = "RED"
+            return winner, swapped
 
         if verbose:
             print(f"[T{turn}] {current_agent.__class__.__name__} ({Colour.get_char(current_agent.colour)}) -> {getattr(move,'x',None)},{getattr(move,'y',None)} ({dur:.3f}s)")
@@ -63,7 +71,10 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
         # handle swap
         if move.x == -1 and move.y == -1:
             if turn != 2:
-                return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+                if current_agent.colour == Colour.RED:
+                    return "BLUE", swapped
+                else:
+                    return "RED", swapped
 
             a1.colour, a2.colour = a2.colour, a1.colour
             swapped = True
@@ -75,7 +86,11 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
             except Exception as e:
                 if verbose:
                     print("Error applying move:", e)
-                return "BLUE", swapped if current_agent.colour == Colour.RED else "RED"
+                if current_agent.colour == Colour.RED:
+                    winner = "BLUE"
+                else:
+                    winner = "RED"
+                return winner, swapped
 
         try:
             if board.has_ended(Colour.RED):
@@ -84,7 +99,10 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
                 return "BLUE", swapped
         except Exception:
             if hasattr(board, "get_winner") and board.get_winner() is not None:
-                return "RED", swapped if board.get_winner() == Colour.RED else "BLUE"
+                if board.get_winner() == Colour.RED:
+                    return "RED", swapped
+                else:
+                    return "BLUE", swapped
 
         # prepare next turn
         opp_move = move
@@ -104,7 +122,10 @@ def play_single_game(agent1_class, agent2_class, board_size=11, verbose=False, t
                             blue_count += 1
             if verbose:
                 print("Turn cap reached; deciding by piece counts:", red_count, blue_count)
-            return "RED", swapped if red_count >= blue_count else "BLUE", swapped
+            if red_count >= blue_count:
+                return "RED", swapped
+            else:
+                return "BLUE", swapped
 
 def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False):
     
@@ -130,6 +151,8 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
                 results["agent2"] += 1
             else:
                 results["agent1"] += 1
+        if verbose:
+            print("Current score:", results)
 
     # Phase 2: agent2 = Red, agent1 = Blue
     for i in range(games_as_p2_red):
@@ -150,6 +173,8 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
                 results["agent1"] += 1
             else:
                 results["agent2"] += 1
+        if verbose:
+            print("Current score:", results)
 
     return results
 
