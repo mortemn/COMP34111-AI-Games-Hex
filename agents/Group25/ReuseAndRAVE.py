@@ -96,7 +96,7 @@ class Node:
 
         # Explanation for child.move is None: currently in our implementation, there is no scenario where the root node is passed to ucb, but to be safe, this check is here
         effective_depth = self.depth - root_depth
-        if self.depth >= RAVE_MAX_DEPTH or child.move is None:
+        if effective_depth >= RAVE_MAX_DEPTH or child.move is None:
             # This is normal UCT without RAVE
             return q_uct + uct_exp
 
@@ -269,6 +269,7 @@ class ReuseMCTS(AgentBase):
         bitboard = convert_bitboard(board)
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
+            self.root_depth = self.root.depth
         else:
             if opp_move is not None:
                 if opp_move.x != -1 and opp_move.y != -1:
@@ -289,12 +290,15 @@ class ReuseMCTS(AgentBase):
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)
+                        self.root_depth = self.root.depth
                 else:
                     # Pie rule used, easiest approach is to rebuild the Node, this can be improved
                     self.root = Node(self.colour, None, None, bitboard, self.colour)
+                    self.root_depth = self.root.depth
             else:
                 # Fallback condition, which probably also means we are red on the first move
                 self.root = Node(self.colour, None, None, bitboard, self.colour)
+                self.root_depth = self.root.depth
                 
 
         time_remaining = max(0.0, TIME_LIMIT - self.time_used)
@@ -310,6 +314,7 @@ class ReuseMCTS(AgentBase):
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None
+        self.root_depth = self.root.depth
 
         time_spent = end_time - start_time
         self.time_used += time_spent

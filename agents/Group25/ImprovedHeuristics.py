@@ -13,10 +13,14 @@ from src.Tile import Tile
 from math import sqrt, inf, log
 from random import choice
 
+# CONSTANTS
+
+# RAVE
 C_EXPLORATION = 0.7
 RAVE_CONSTANT = 700
 RAVE_MAX_DEPTH = 7
 
+# Ordering
 MAX_ORDER_DEPTH = 2
 LOCALITY_D1 = 10
 LOCALITY_D2 = 5
@@ -181,7 +185,7 @@ class Node:
         self.rave_wins: dict[tuple[int, int], float] = {}
         self.rave_visits: dict[tuple[int, int], int] = {}
 
-    def ucb(self, child: Node):
+    def ucb(self, child: Node, root_depth: int):
         # Explore unvisited children
         if child.visits == 0:
             return inf
@@ -193,7 +197,8 @@ class Node:
         uct_exp = C_EXPLORATION * sqrt(log(self.visits + 1)/child.visits)
 
         # Explanation for child.move is None: currently in our implementation, there is no scenario where the root node is passed to ucb, but to be safe, this check is here
-        if self.depth >= RAVE_MAX_DEPTH or child.move is None:
+        effective_depth = self.depth - root_depth
+        if effective_depth >= RAVE_MAX_DEPTH or child.move is None:
             # This is normal UCT without RAVE
             return q_uct + uct_exp
 
@@ -210,16 +215,16 @@ class Node:
 
         return q_final + uct_exp
 
-    def best_child(self):
-        return max(self.children, key=lambda x: self.ucb(x))
+    def best_child(self, root_depth: int):
+        return max(self.children, key=lambda x: self.ucb(x, root_depth))
 
-    def select(self):
+    def select(self, root_depth):
         # TODO: What if there are multiple children of the same UCB? The selection might not be truly random. It might also be worth it to implement a heuristic for this
         
         # If there are no untried moves, iterate until a child with untried moves is reached
         node = self
         while not node.untried_moves and node.children:
-            node = node.best_child()
+            node = node.best_child(root_depth)
         return node
 
     def expand(self):
@@ -240,6 +245,9 @@ class Node:
         colour = self.colour
 
         trace: list[tuple[Colour, tuple[int, int]]] = []
+        playout_depth = 0
+        last_move = self.move
+        size = new_board.size
 
         while True:
             moves = new_board.legal_moves()
@@ -250,11 +258,49 @@ class Node:
                 else:
                     return Colour.BLUE, trace
 
-            idx = random.randrange(len(moves))
-            x, y = moves.pop(idx)
+            if playout_depth <= 15:
+                LOCAL_PROB = 0.3
+                # ADJ_PROB = 0.1
+            elif playout_depth <= 35:
+                LOCAL_PROB = 0.6
+                # ADJ_PROB = 0.2
+            else:
+                LOCAL_PROB = 0.25
+                # ADJ_PROB = 0.1
+
+            move = None
+            # Local move heuristic
+            if last_move is not None and random.random() < LOCAL_PROB:
+                lx, ly = last_move
+                local = []
+                for dx, dy in NEIGBOUR_OFFSETS:
+                    nx, ny = lx + dx, ly + dy
+                    if 0 <= nx < size and 0 <= ny < size and (nx, ny) in moves:
+                        local.append((nx, ny))
+                if local:
+                    move = random.choice(local)
             
-            new_board.move_at(x, y, colour)
-            trace.append((colour, (x, y)))
+            # Adjacency heuristic
+            # if move is None and random.random() < ADJ_PROB:
+            #     adjacent = []
+            #     for candidate in moves:
+            #         for dx, dy in NEIGBOUR_OFFSETS:
+            #             nx, ny = candidate[0] + dx, candidate[1] + dy
+            #             if 0 <= nx < size and 0 <= ny < size:
+            #                 if new_board.colour_at(nx, ny) == colour:
+            #                     adjacent.append(candidate)
+            #                     print(candidate, (nx, ny))
+            #                     break
+            #     if adjacent:
+            #         move = random.choice(adjacent)
+
+            if move is None:
+                idx = random.randrange(len(moves))
+                x, y = moves.pop(idx)
+                move = (x, y)
+            
+            new_board.move_at(move[0], move[1], colour)
+            trace.append((colour, (move[0], move[1])))
 
             # Only check for win from the previous player's color, reduces checks by half
             if colour == Colour.RED:
@@ -264,6 +310,8 @@ class Node:
                 if new_board.blue_won():
                     return Colour.BLUE, trace
 
+            last_move = move
+            playout_depth += 1
             colour = Colour.opposite(colour)
 
     def backpropagate(self, winner: Colour, trace: list[tuple[Colour, tuple[int, int]]]):
@@ -276,23 +324,19 @@ class Node:
             if colour == self.colour:
                 # Update the number of visits for this move
                 self.rave_visits[move] = self.rave_visits.get(move, 0) + 1
-                wins_before = self.rave_wins.get(move, 0.0)
                 # Win is updated depending on whether or not this move's colour is same as root
                 if winner == self.root_colour:
-                    self.rave_wins[move] = wins_before + 1.0
-                else:
-                    self.rave_wins[move] = wins_before
+                    self.rave_wins[move] = self.rave_wins.get(move, 0) + 1.0
 
         if self.parent:
             self.parent.backpropagate(winner, trace)
 
-    # TODO: make search time based to fit with time constraints of CW
-    def search(self, limit):
+    def search(self, limit, root_depth: int):
         stop_time = time.time() + limit
         iterations = 0
 
         while time.time() < stop_time:
-            node = self.select()
+            node = self.select(root_depth)
             if node.untried_moves:
                 node = node.expand()
             winner, trace = node.simulate()
@@ -302,13 +346,14 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
-class OrderedMCTS(AgentBase):
+class ImprovedHeuMCTS(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
         self.time_used = 0
         self.total_iterations = 0
         self.root = None
+        self.root_depth = 0
         self.opening_book = OpeningBook(colour)
 
         # self.agent_process = subprocess.Popen(
@@ -382,6 +427,7 @@ class OrderedMCTS(AgentBase):
             
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
+            self.root_depth = self.root.depth
         else:
             if opp_move is not None:
                 if opp_move.x != -1 and opp_move.y != -1:
@@ -390,9 +436,9 @@ class OrderedMCTS(AgentBase):
                     for child in self.root.children:
                         if child.move == target:
                             found = True
-                            logger.debug("FOUND")
                             old_parent = child.parent
                             self.root = child
+                            self.root_depth = self.root.depth
                             # Free references
                             if old_parent is not None:
                                 old_parent.children = []
@@ -401,17 +447,20 @@ class OrderedMCTS(AgentBase):
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)
+                        self.root_depth = self.root.depth
                 else:
                     # Pie rule used, easiest approach is to rebuild the Node, this can be improved
                     self.root = Node(self.colour, None, None, bitboard, self.colour)
+                    self.root_depth = self.root.depth
             else:
                 # Fallback condition, which probably also means we are red on the first move
                 self.root = Node(self.colour, None, None, bitboard, self.colour)
+                self.root_depth = self.root.depth
 
         move_limit = time_allocator(turn, bitboard, time_remaining)
 
         start_time = time.time()
-        best_child, response, iterations = self.root.search(move_limit)
+        best_child, response, iterations = self.root.search(move_limit, self.root_depth)
         end_time = time.time()
 
         old_parent = best_child.parent
@@ -419,6 +468,7 @@ class OrderedMCTS(AgentBase):
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None
+        self.root_depth = self.root.depth
 
         time_spent = end_time - start_time
         self.time_used += time_spent

@@ -11,11 +11,12 @@ from HeuMCTS import HeuMCTSAgent
 from TunedHeuristics import TunedMCTSAgent as TunedHeuristicMCTSAgent
 from OrderedMCTS import OrderedMCTS
 from SmallHeuristics import SmallHeuMCTS
+from ImprovedHeuristics import ImprovedHeuMCTS
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = ReuseMCTS
-    agent2 = MCTSAgent
+    agent1 = ImprovedHeuMCTS
+    agent2 = SmallHeuMCTS
 
     results = run_matches(
         agent1_class=agent1,

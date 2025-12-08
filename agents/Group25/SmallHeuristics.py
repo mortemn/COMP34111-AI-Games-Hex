@@ -185,7 +185,7 @@ class Node:
         self.rave_wins: dict[tuple[int, int], float] = {}
         self.rave_visits: dict[tuple[int, int], int] = {}
 
-    def ucb(self, child: Node):
+    def ucb(self, child: Node, root_depth: int):
         # Explore unvisited children
         if child.visits == 0:
             return inf
@@ -197,7 +197,8 @@ class Node:
         uct_exp = C_EXPLORATION * sqrt(log(self.visits + 1)/child.visits)
 
         # Explanation for child.move is None: currently in our implementation, there is no scenario where the root node is passed to ucb, but to be safe, this check is here
-        if self.depth >= RAVE_MAX_DEPTH or child.move is None:
+        effective_depth = self.depth - root_depth
+        if effective_depth >= RAVE_MAX_DEPTH or child.move is None:
             # This is normal UCT without RAVE
             return q_uct + uct_exp
 
@@ -214,16 +215,16 @@ class Node:
 
         return q_final + uct_exp
 
-    def best_child(self):
-        return max(self.children, key=lambda x: self.ucb(x))
+    def best_child(self, root_depth: int):
+        return max(self.children, key=lambda x: self.ucb(x, root_depth))
 
-    def select(self):
+    def select(self, root_depth):
         # TODO: What if there are multiple children of the same UCB? The selection might not be truly random. It might also be worth it to implement a heuristic for this
         
         # If there are no untried moves, iterate until a child with untried moves is reached
         node = self
         while not node.untried_moves and node.children:
-            node = node.best_child()
+            node = node.best_child(root_depth)
         return node
 
     def expand(self):
@@ -258,11 +259,14 @@ class Node:
                     return Colour.BLUE, trace
 
             if playout_depth <= 15:
-                LOCAL_PROB = 0.3
+                # LOCAL_PROB = 0.3
+                LOCAL_PROB = 0
             elif playout_depth <= 35:
-                LOCAL_PROB = 0.6
+                # LOCAL_PROB = 0.6
+                LOCAL_PROB = 0
             else:
-                LOCAL_PROB = 0.25
+                # LOCAL_PROB = 0.25
+                LOCAL_PROB = 0
 
             move = None
             # local move heuristic
@@ -316,13 +320,12 @@ class Node:
         if self.parent:
             self.parent.backpropagate(winner, trace)
 
-    # TODO: make search time based to fit with time constraints of CW
-    def search(self, limit):
+    def search(self, limit, root_depth: int):
         stop_time = time.time() + limit
         iterations = 0
 
         while time.time() < stop_time:
-            node = self.select()
+            node = self.select(root_depth)
             if node.untried_moves:
                 node = node.expand()
             winner, trace = node.simulate()
@@ -339,6 +342,7 @@ class SmallHeuMCTS(AgentBase):
         self.time_used = 0
         self.total_iterations = 0
         self.root = None
+        self.root_depth = 0
         self.opening_book = OpeningBook(colour)
 
         # self.agent_process = subprocess.Popen(
@@ -412,6 +416,7 @@ class SmallHeuMCTS(AgentBase):
             
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
+            self.root_depth = self.root.depth
         else:
             if opp_move is not None:
                 if opp_move.x != -1 and opp_move.y != -1:
@@ -420,9 +425,9 @@ class SmallHeuMCTS(AgentBase):
                     for child in self.root.children:
                         if child.move == target:
                             found = True
-                            logger.debug("FOUND")
                             old_parent = child.parent
                             self.root = child
+                            self.root_depth = self.root.depth
                             # Free references
                             if old_parent is not None:
                                 old_parent.children = []
@@ -431,17 +436,20 @@ class SmallHeuMCTS(AgentBase):
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)
+                        self.root_depth = self.root.depth
                 else:
                     # Pie rule used, easiest approach is to rebuild the Node, this can be improved
                     self.root = Node(self.colour, None, None, bitboard, self.colour)
+                    self.root_depth = self.root.depth
             else:
                 # Fallback condition, which probably also means we are red on the first move
                 self.root = Node(self.colour, None, None, bitboard, self.colour)
+                self.root_depth = self.root.depth
 
         move_limit = time_allocator(turn, bitboard, time_remaining)
 
         start_time = time.time()
-        best_child, response, iterations = self.root.search(move_limit)
+        best_child, response, iterations = self.root.search(move_limit, self.root_depth)
         end_time = time.time()
 
         old_parent = best_child.parent
@@ -449,6 +457,7 @@ class SmallHeuMCTS(AgentBase):
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None
+        self.root_depth = self.root.depth
 
         time_spent = end_time - start_time
         self.time_used += time_spent
