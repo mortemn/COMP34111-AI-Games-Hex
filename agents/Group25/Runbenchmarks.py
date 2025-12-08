@@ -10,16 +10,17 @@ from EndgameMCTS import EndgameMCTSAgent as EndgameMCTSAgent
 from HeuMCTS import HeuMCTSAgent
 from TunedHeuristics import TunedMCTSAgent as TunedHeuristicMCTSAgent
 from OrderedMCTS import OrderedMCTS
+from SmallHeuristics import SmallHeuMCTS
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = MCTSAgent
-    agent2 = EndgameMCTSAgent
+    agent1 = ReuseMCTS
+    agent2 = MCTSAgent
 
     results = run_matches(
         agent1_class=agent1,
         agent2_class=agent2,
-        games=20,
+        games=150,
         board_size=11,
         verbose=True
     )

@@ -152,7 +152,9 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
             else:
                 results["agent1"] += 1
         if verbose:
-            print("Current score:", results)
+            print(f"Current score: "
+                    f"{agent1_class.__name__}: {results['agent1']}, "
+                    f"{agent2_class.__name__}: {results['agent2']}")
 
     # Phase 2: agent2 = Red, agent1 = Blue
     for i in range(games_as_p2_red):
@@ -176,7 +178,11 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
         if verbose:
             print("Current score:", results)
 
-    return results
+    result_message = (f"Final results after {games} games: "
+                        f"{agent1_class.__name__} wins: {results['agent1']}, "
+                        f"{agent2_class.__name__} wins: {results['agent2']}")
+
+    return result_message
 
 
 # Elo helpers and round robin
