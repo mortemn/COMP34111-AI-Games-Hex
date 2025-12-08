@@ -83,6 +83,21 @@ class Bitboard():
             self.blue_moves -= 1
         self.empty_cells.add((x, y))
 
+    # Optimisation for win checking
+    def red_edges_touched(self):
+        top = self.red & TOP_MASK
+        bottom = self.red & BOTTOM_MASK
+        if top and bottom:
+            return True
+        return False
+
+    def blue_edges_touched(self):
+        left = self.blue & LEFT_MASK
+        right = self.blue & RIGHT_MASK
+        if left and right:
+            return True
+        return False
+
     def red_can_win(self):
         return self.red_moves >= self.size - 1
 
@@ -95,11 +110,14 @@ class Bitboard():
     def copy(self):
         new_board = Bitboard(self.size, self.red, self.blue)
         new_board.empty_cells = self.empty_cells.copy()
+        new_board.red_moves = self.red_moves
+        new_board.blue_moves = self.blue_moves
         return new_board
 
     def red_won(self):
         red = self.red
-        if red == 0: return False
+        if red == 0 or not self.red_edges_touched():
+            return False
 
         frontier = red & TOP_MASK
         visited = 0
@@ -125,7 +143,8 @@ class Bitboard():
 
     def blue_won(self):
         blue = self.blue
-        if blue == 0: return False
+        if blue == 0 or not self.blue_edges_touched():
+            return False
 
         frontier = blue & LEFT_MASK
         visited = 0
@@ -154,6 +173,8 @@ def convert_bitboard(board: Board):
     red = 0
     blue = 0
     empty_cells = set()
+    red_moves = 0
+    blue_moves = 0
 
     for x in range(size):
         for y in range(size):
@@ -169,4 +190,7 @@ def convert_bitboard(board: Board):
 
     bitboard = Bitboard(size, red, blue)
     bitboard.empty_cells = empty_cells
+    bitboard.red_moves = red_moves
+    bitboard.blue_moves = blue_moves
+
     return bitboard

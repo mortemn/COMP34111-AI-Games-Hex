@@ -33,6 +33,19 @@ NEIGBOUR_OFFSETS = [(-1, -1), (-1, 0), (-1, 1),
                     (0, -1),          (0, 1),
                     (1, -1),  (1, 0), (1, 1)]
 
+def precompute_neighbour_table(size: int):
+    neighbour_table = {}
+    for x in range(size):
+        for y in range(size):
+            neighbour_table[(x, y)] = []
+            for dx, dy in NEIGBOUR_OFFSETS:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < size and 0 <= ny < size:
+                    neighbour_table[(x, y)].append((nx, ny))
+    return neighbour_table
+
+NEIGHBOUR_TABLE = precompute_neighbour_table(11)
+
 # Moves that are closed to opponent's last move are prioritised
 def locality(opp_move: tuple[int, int], candidate_move: tuple[int, int]):
     dx = abs(opp_move[0] - candidate_move[0])
@@ -249,10 +262,13 @@ class Node:
         last_move = self.move
 
         legal_moves = new_board.legal_moves()
+        # Use a set for faster lookup times
+        legal_moves_set = set(legal_moves)
         seed = random.randrange(9999999999999999)
 
         try:
             while legal_moves:
+                base_hash = hash((seed, playout_depth))
                 if playout_depth <= 15:
                     LOCAL_PROB = 30
                     # ADJ_PROB = 0.1
@@ -266,19 +282,17 @@ class Node:
                 move = None
 
                 # Somewhat random
-                use_local = (hash((seed, playout_depth)) % 100) < LOCAL_PROB
+                use_local = (base_hash % 100) < LOCAL_PROB
 
                 # Local move heuristic
                 if last_move is not None and use_local:
                     lx, ly = last_move
-                    local = []
-                    for dx, dy in NEIGBOUR_OFFSETS:
-                        nx, ny = lx + dx, ly + dy
-                        if 0 <= nx < size and 0 <= ny < size and (nx, ny) in legal_moves:
-                            local.append((nx, ny))
+                    local = [m for m in NEIGHBOUR_TABLE[last_move] if m in legal_moves_set]
                     if local:
-                        index = hash((seed, playout_depth, lx, ly)) % len(local)
+                        # Fancy hash mixing to reduce collisions
+                        index = (base_hash + lx * 11 + ly) % len(local)
                         move = local[index]
+                        legal_moves_set.remove(move)
                         legal_moves.remove(move)
 
                 
@@ -297,8 +311,9 @@ class Node:
                 #         move = random.choice(adjacent)
 
                 if move is None:
-                    index = hash((seed, playout_depth)) % len(legal_moves)
+                    index = base_hash % len(legal_moves)
                     move = legal_moves.pop(index)
+                    legal_moves_set.remove(move)
                 
                 new_board.move_at(move[0], move[1], colour)
                 move_stack.append((move, colour))
@@ -306,10 +321,10 @@ class Node:
 
                 # Only check for win from the previous player's color, reduces checks by half
                 if colour == Colour.RED:
-                    if new_board.red_can_win() and new_board.red_won():
+                    if new_board.red_can_win() and new_board.red_edges_touched() and new_board.red_won():
                         return Colour.RED, trace
                 else:
-                    if new_board.blue_can_win() and new_board.blue_won():
+                    if new_board.blue_can_win() and new_board.blue_edges_touched() and new_board.blue_won():
                         return Colour.BLUE, trace
 
                 last_move = move
