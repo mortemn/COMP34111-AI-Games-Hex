@@ -13,7 +13,7 @@ from TunedHeuristics import TunedMCTSAgent as TunedHeuristicMCTSAgent
 if __name__ == "__main__":
     print("Starting quick benchmark.")
     agent1 = EndgameMCTSAgent
-    agent2 = IntegratedAgent
+    agent2 = MCTSAgent
 
     results = run_matches(
         agent1_class=agent1,

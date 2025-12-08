@@ -50,6 +50,47 @@ def find_opp_forced_win(board: Bitboard, colour: Colour):
 
     return wins
 
+def time_allocator(turn: int, board: Bitboard, time_remaining: float):
+    if time_remaining <= 0.01:
+        return 0.01
+
+    board_area = board.size * board.size
+    moves_played = turn - 1
+
+    our_moves_left = (board_area - moves_played) // 2
+
+    baseline = time_remaining / our_moves_left
+
+    if turn <= 5:
+        # Opening
+        phase = 3
+    elif turn <= 10:
+        # Early middlegame
+        phase = 2
+    elif turn <= 30:
+        phase = 1.5
+    elif turn <= 40:
+        phase = 1.0
+    else:
+        phase = 0.6
+
+    base_time = baseline * phase
+    # Don't spend more than 50% of remaining time on one move
+    max_time = 0.5 * time_remaining
+
+    HARD_MIN = 0.02
+    HARD_MAX = 5.0
+
+    # Time trouble
+    if time_remaining < 5.0:
+        return min(time_remaining / 5, 0.5)
+
+    move_time = max(HARD_MIN, min(base_time, HARD_MAX, max_time))
+
+    return move_time
+
+
+
 class Node:
     def __init__(self, colour: Colour, move: tuple[int, int] | None, parent, board: Bitboard, root_colour: Colour, depth: int = 0):
         # Colour to move in the current turn
@@ -301,26 +342,7 @@ class EndgameMCTSAgent(AgentBase):
                 # Fallback condition, which probably also means we are red on the first move
                 self.root = Node(self.colour, None, None, bitboard, self.colour)
 
-        if time_remaining < 10:
-            # If we're in time trouble, allocate at most 0.05 seconds per move
-            if time_remaining <= 0.01:
-                move_limit = 0.01
-            else:
-                move_limit = min(0.05, time_remaining)
-        else:
-            # Early game
-            if turn < 10:
-                base = 3.0
-            # Mid game
-            elif turn < 30:
-                base = 2.0
-            # End game
-            else:
-                base = 1.0
-
-            # Conservation time usage
-            move_limit = min(base, time_remaining / 2.0)
-
+        move_limit = time_allocator(turn, bitboard, time_remaining)
 
         start_time = time.time()
         best_child, response, iterations = self.root.search(move_limit)
