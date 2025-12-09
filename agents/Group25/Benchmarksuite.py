@@ -178,11 +178,11 @@ def run_matches(agent1_class, agent2_class, games, board_size=11, verbose=False)
         if verbose:
             print("Current score:", results)
 
-    result_message = (f"Final results after {games} games: "
-                        f"{agent1_class.__name__} wins: {results['agent1']}, "
-                        f"{agent2_class.__name__} wins: {results['agent2']}")
+    # result_message = (f"Final results after {games} games: "
+    #                     f"{agent1_class.__name__} wins: {results['agent1']}, "
+    #                     f"{agent2_class.__name__} wins: {results['agent2']}")
 
-    return result_message
+    return results
 
 
 # Elo helpers and round robin
