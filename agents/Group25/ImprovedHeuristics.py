@@ -443,7 +443,6 @@ class ImprovedHeuMCTS(AgentBase):
                             if old_parent is not None:
                                 old_parent.children = []
                                 self.root.parent = None
-                            self.root.board = bitboard
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)

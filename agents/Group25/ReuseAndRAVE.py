@@ -113,6 +113,10 @@ class Node:
 
         return q_final + uct_exp
 
+    def clear_rave_stats(self):
+        self.rave_wins.clear()
+        self.rave_visits.clear()
+
     def best_child(self, root_depth: int):
         return max(self.children, key=lambda x: self.ucb(x, root_depth))
 
@@ -267,6 +271,7 @@ class ReuseMCTS(AgentBase):
 
             
         bitboard = convert_bitboard(board)
+
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
             self.root_depth = self.root.depth
@@ -278,15 +283,14 @@ class ReuseMCTS(AgentBase):
                     for child in self.root.children:
                         if child.move == target:
                             found = True
-                            logger.debug("FOUND")
                             old_parent = child.parent
                             self.root = child
+                            self.root.clear_rave_stats()
                             self.root_depth = self.root.depth
                             # Free references
                             if old_parent is not None:
                                 old_parent.children = []
                                 self.root.parent = None
-                            self.root.board = bitboard
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)
@@ -311,6 +315,7 @@ class ReuseMCTS(AgentBase):
 
         old_parent = best_child.parent
         self.root = best_child
+        self.root.clear_rave_stats()
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None

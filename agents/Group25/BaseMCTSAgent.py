@@ -13,6 +13,47 @@ from math import sqrt, inf, log
 from copy import deepcopy
 from random import choice
 
+TIME_LIMIT = 3 * 60
+
+def time_allocator(turn: int, board: Bitboard, time_remaining: float):
+    if time_remaining <= 0.01:
+        return 0.01
+
+    board_area = board.size * board.size
+    moves_played = turn - 1
+
+    our_moves_left = (board_area - moves_played) // 2
+
+    baseline = time_remaining / our_moves_left
+
+    if turn <= 5:
+        # Opening
+        phase = 3
+    elif turn <= 10:
+        # Early middlegame
+        phase = 2
+    elif turn <= 30:
+        phase = 1.5
+    elif turn <= 40:
+        phase = 1.0
+    else:
+        phase = 0.6
+
+    base_time = baseline * phase
+    # Don't spend more than 50% of remaining time on one move
+    max_time = 0.5 * time_remaining
+
+    HARD_MIN = 0.02
+    HARD_MAX = 5.0
+
+    # Time trouble
+    if time_remaining < 5.0:
+        return min(time_remaining / 5, 0.5)
+
+    move_time = max(HARD_MIN, min(base_time, HARD_MAX, max_time))
+
+    return move_time
+
 class Node:
     def __init__(self, colour: Colour, move: Move, parent, board: Board, root_colour: Colour):
         # Colour to move in the current turn
@@ -99,13 +140,15 @@ class Node:
             self.parent.backpropagate(winner)
 
     # TODO: make search time based to fit with time constraints of CW
-    def search(self, iterations):
-        for i in range(iterations):
+    def search(self, limit):
+        stop_time = time.time() + limit
+        iterations = 0
+
+        while time.time() < stop_time:
             node = self.select()
             if node.untried_moves:
                 node = node.expand()
-            winner = node.simulate()
-            node.backpropagate(winner)
+            iterations += 1
 
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child.move
@@ -115,6 +158,7 @@ class BaseMCTSAgent(AgentBase):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
         self.average_time = 0
+        self.time_used = 0
 
         # self.agent_process = subprocess.Popen(
         #     ["./agents/MCTSAgent/mcts-hex"],
@@ -165,19 +209,22 @@ class BaseMCTSAgent(AgentBase):
         # self.agent_process.stdin.write(command + "\n")
         # self.agent_process.stdin.flush()
 
+        new_board = convert_bitboard(board)
+
+        time_remaining = TIME_LIMIT - self.time_used
+
         root = Node(self.colour, opp_move, None, board, self.colour)
-<<<<<<< HEAD:agents/Group25/MCTSAgent.py
-        iterations = 1000
-=======
-        iterations = 50
+        move_limit = time_allocator(turn, new_board, time_remaining)
+
         start_time = time.time()
->>>>>>> main:agents/Group25/BaseMCTSAgent.py
-        response = root.search(iterations)
+        response = root.search(move_limit)
         end_time = time.time()
+
+        self.time_used += end_time - start_time
+
         if self.average_time == 0:
             self.average_time = end_time - start_time
         else:
             self.average_time = (self.average_time + (end_time - start_time)) / 2
-        logger.log(10, f"Unoptimized MCTS average time per move ({iterations} iterations): {self.average_time} seconds")
         # assuming the response takes the form "x,y" with -1,-1 if the agent wants to make a swap move
         return response
