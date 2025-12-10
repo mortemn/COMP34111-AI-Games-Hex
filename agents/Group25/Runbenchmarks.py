@@ -4,6 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 
 from Benchmarksuite import run_matches, round_robin_elos
 from EliminateCopy import EliminateCopyMCTS
+from BaseMCTSAgent import BaseMCTSAgent
 from RAVEMCTSAgent import MCTSAgent
 from ReuseAndRAVE import ReuseMCTS
 from IntegrateBridge import IntegratedAgent
@@ -16,7 +17,7 @@ from ImprovedHeuristics import ImprovedHeuMCTS
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = ImprovedHeuMCTS
+    agent1 = MCTSAgent
     agent2 = EliminateCopyMCTS
 
     results = run_matches(
