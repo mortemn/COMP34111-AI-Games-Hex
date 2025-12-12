@@ -228,6 +228,10 @@ class Node:
 
         return q_final + uct_exp
 
+    def clear_rave_stats(self):
+        self.rave_wins.clear()
+        self.rave_visits.clear()
+
     def best_child(self, root_depth: int):
         return max(self.children, key=lambda x: self.ucb(x, root_depth))
 
@@ -257,12 +261,8 @@ class Node:
         colour = self.colour
         size = new_board.size
 
-        # Use arrays instead of lists
-        trace = [None] * (size * size)
-        trace_index = 0
-        move_stack = [None] * (size * size)
-        stack_index = 0
-
+        trace: list[tuple[Colour, tuple[int, int]]] = []
+        move_stack = []
         playout_depth = 0
         last_move = self.move
 
@@ -273,8 +273,7 @@ class Node:
 
         try:
             while legal_moves:
-                base_hash = seed + trace_index * 997
-
+                base_hash = hash((seed, playout_depth))
                 if playout_depth <= 15:
                     LOCAL_PROB = 30
                     # ADJ_PROB = 0.1
@@ -322,18 +321,16 @@ class Node:
                     legal_moves_set.remove(move)
                 
                 new_board.move_at(move[0], move[1], colour)
-                move_stack[stack_index] = (move, colour)
-                stack_index += 1
-                trace[trace_index] = (colour, move)
-                trace_index += 1
+                move_stack.append((move, colour))
+                trace.append((colour, (move[0], move[1])))
 
                 # Only check for win from the previous player's color, reduces checks by half
                 if colour == Colour.RED:
                     if new_board.red_can_win() and new_board.red_edges_touched() and new_board.red_won():
-                        return Colour.RED, trace[:trace_index]
+                        return Colour.RED, trace
                 else:
                     if new_board.blue_can_win() and new_board.blue_edges_touched() and new_board.blue_won():
-                        return Colour.BLUE, trace[:trace_index]
+                        return Colour.BLUE, trace
 
                 last_move = move
                 playout_depth += 1
@@ -343,8 +340,7 @@ class Node:
             else:
                 return Colour.BLUE, trace
         finally:
-            for i in range(stack_index - 1, -1, -1):
-                move, colour = move_stack[i]
+            for move, colour in reversed(move_stack):
                 new_board.undo_at(move[0], move[1], colour)
 
     def backpropagate(self, winner: Colour, trace: list[tuple[Colour, tuple[int, int]]]):
@@ -379,7 +375,7 @@ class Node:
         best_child = max(self.children, key=lambda x: x.visits)
         return best_child, Move(best_child.move[0], best_child.move[1]), iterations
 
-class EliminateCopyMCTS(AgentBase):
+class TryOpeningMCTS(AgentBase):
     def __init__(self, colour: Colour):
         # Colour: red or blue - red moves first.
         super().__init__(colour)
@@ -444,8 +440,10 @@ class EliminateCopyMCTS(AgentBase):
         time_remaining = max(0.0, TIME_LIMIT - self.time_used)
         bitboard = convert_bitboard(board)
 
-        # if self.opening_book.in_book(turn, opp_move):
-        #     return self.opening_book.play_move(turn, opp_move)
+        if self.opening_book.in_book(turn, opp_move):
+            move = self.opening_book.play_move(turn, opp_move)
+            if move is not None:
+                return move
 
         if len(bitboard.legal_moves()) <= 25 and time_remaining > 8.0:
             forced_win = find_forced_win(bitboard, self.colour)
@@ -471,6 +469,7 @@ class EliminateCopyMCTS(AgentBase):
                             found = True
                             old_parent = child.parent
                             self.root = child
+                            self.root.clear_rave_stats()
                             self.root_depth = self.root.depth
                             # Free references
                             if old_parent is not None:
@@ -497,6 +496,7 @@ class EliminateCopyMCTS(AgentBase):
 
         old_parent = best_child.parent
         self.root = best_child
+        self.root.clear_rave_stats()
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None

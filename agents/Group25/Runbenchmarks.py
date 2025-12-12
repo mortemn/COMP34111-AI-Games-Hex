@@ -12,13 +12,14 @@ from EndgameMCTS import EndgameMCTSAgent as EndgameMCTSAgent
 from HeuMCTS import HeuMCTSAgent
 from TunedHeuristics import TunedMCTSAgent as TunedHeuristicMCTSAgent
 from OrderedMCTS import OrderedMCTS
+from OpeningAttempt import TryOpeningMCTS
 from SmallHeuristics import SmallHeuMCTS
 from ImprovedHeuristics import ImprovedHeuMCTS
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = MCTSAgent
-    agent2 = EliminateCopyMCTS
+    agent1 = ReuseMCTS
+    agent2 = MCTSAgent
 
     results = run_matches(
         agent1_class=agent1,

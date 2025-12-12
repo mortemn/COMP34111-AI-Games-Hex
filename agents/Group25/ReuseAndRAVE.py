@@ -113,10 +113,6 @@ class Node:
 
         return q_final + uct_exp
 
-    def clear_rave_stats(self):
-        self.rave_wins.clear()
-        self.rave_visits.clear()
-
     def best_child(self, root_depth: int):
         return max(self.children, key=lambda x: self.ucb(x, root_depth))
 
@@ -285,8 +281,13 @@ class ReuseMCTS(AgentBase):
                             found = True
                             old_parent = child.parent
                             self.root = child
-                            self.root.clear_rave_stats()
+                            for child in self.root.children:
+                                logger.log(11, f"Child visits: {child.visits}")
                             self.root_depth = self.root.depth
+
+                            self.root.visits = 0
+                            self.root.wins = 0
+
                             # Free references
                             if old_parent is not None:
                                 old_parent.children = []
@@ -315,7 +316,6 @@ class ReuseMCTS(AgentBase):
 
         old_parent = best_child.parent
         self.root = best_child
-        self.root.clear_rave_stats()
         if old_parent is not None:
             old_parent.children = []
             self.root.parent = None
