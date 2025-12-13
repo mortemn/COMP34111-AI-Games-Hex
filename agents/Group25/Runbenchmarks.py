@@ -1,5 +1,6 @@
 
 import sys, os
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from Benchmarksuite import run_matches, round_robin_elos
@@ -15,11 +16,12 @@ from OrderedMCTS import OrderedMCTS
 from OpeningAttempt import TryOpeningMCTS
 from SmallHeuristics import SmallHeuMCTS
 from ImprovedHeuristics import ImprovedHeuMCTS
+from ParallelMCTS import ParallelMCTS
 
 if __name__ == "__main__":
     print("Starting quick benchmark.")
-    agent1 = ReuseMCTS
-    agent2 = MCTSAgent
+    agent1 = EliminateCopyMCTS
+    agent2 = ParallelMCTS
 
     results = run_matches(
         agent1_class=agent1,
