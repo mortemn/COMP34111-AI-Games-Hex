@@ -36,6 +36,9 @@ class Bitboard():
         self.size = size
         self.red = red
         self.blue = blue
+        self.empty_cells = set((x, y) for x in range(size) for y in range(size))
+        self.red_moves = 0
+        self.blue_moves = 0
 
     def index(self, x: int, y: int):
         return x * self.size + y
@@ -64,33 +67,57 @@ class Bitboard():
         b = self.bit(x, y)
         if colour == Colour.RED:
             self.red |= b
+            self.red_moves += 1
         elif colour == Colour.BLUE:
             self.blue |= b
+            self.blue_moves += 1
+        self.empty_cells.discard((x, y))
 
     def undo_at(self, x: int, y: int, colour: Colour):
         b = self.bit(x, y)
         if colour == Colour.RED:
             self.red &= ~b
+            self.red_moves -= 1
         elif colour == Colour.BLUE:
             self.blue &= ~b
+            self.blue_moves -= 1
+        self.empty_cells.add((x, y))
+
+    # Optimisation for win checking
+    def red_edges_touched(self):
+        top = self.red & TOP_MASK
+        bottom = self.red & BOTTOM_MASK
+        if top and bottom:
+            return True
+        return False
+
+    def blue_edges_touched(self):
+        left = self.blue & LEFT_MASK
+        right = self.blue & RIGHT_MASK
+        if left and right:
+            return True
+        return False
+
+    def red_can_win(self):
+        return self.red_moves >= self.size - 1
+
+    def blue_can_win(self):
+        return self.blue_moves >= self.size - 1
 
     def legal_moves(self):
-        moves = []
-        s = self.size * self.size
-        occupied = self.occupied()
-
-        for i in range(s):
-            if not occupied & (1 << i):
-                moves.append(self.coord(i))
-
-        return moves
+        return list(self.empty_cells)
 
     def copy(self):
-        return Bitboard(self.size, self.red, self.blue)
+        new_board = Bitboard(self.size, self.red, self.blue)
+        new_board.empty_cells = self.empty_cells.copy()
+        new_board.red_moves = self.red_moves
+        new_board.blue_moves = self.blue_moves
+        return new_board
 
     def red_won(self):
         red = self.red
-        if red == 0: return False
+        if red == 0 or not self.red_edges_touched():
+            return False
 
         frontier = red & TOP_MASK
         visited = 0
@@ -116,7 +143,8 @@ class Bitboard():
 
     def blue_won(self):
         blue = self.blue
-        if blue == 0: return False
+        if blue == 0 or not self.blue_edges_touched():
+            return False
 
         frontier = blue & LEFT_MASK
         visited = 0
@@ -142,15 +170,27 @@ class Bitboard():
 
 def convert_bitboard(board: Board):
     size = board.size
-    bitboard = Bitboard(size)
+    red = 0
+    blue = 0
+    empty_cells = set()
+    red_moves = 0
+    blue_moves = 0
 
     for x in range(size):
         for y in range(size):
             tile = board.tiles[x][y]
+            idx = x * size + y
 
             if tile.colour == Colour.RED:
-                bitboard.red |= bitboard.bit(x, y)
+                red |= 1 << idx
             elif tile.colour == Colour.BLUE:
-                bitboard.blue |= bitboard.bit(x, y)
+                blue |= 1 << idx
+            else:
+                empty_cells.add((x, y))
+
+    bitboard = Bitboard(size, red, blue)
+    bitboard.empty_cells = empty_cells
+    bitboard.red_moves = red_moves
+    bitboard.blue_moves = blue_moves
 
     return bitboard

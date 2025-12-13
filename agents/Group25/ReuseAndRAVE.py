@@ -267,6 +267,7 @@ class ReuseMCTS(AgentBase):
 
             
         bitboard = convert_bitboard(board)
+
         if self.root is None:
             self.root = Node(self.colour, None, None, bitboard, self.colour)
             self.root_depth = self.root.depth
@@ -278,15 +279,19 @@ class ReuseMCTS(AgentBase):
                     for child in self.root.children:
                         if child.move == target:
                             found = True
-                            logger.debug("FOUND")
                             old_parent = child.parent
                             self.root = child
+                            for child in self.root.children:
+                                logger.log(11, f"Child visits: {child.visits}")
                             self.root_depth = self.root.depth
+
+                            self.root.visits = 0
+                            self.root.wins = 0
+
                             # Free references
                             if old_parent is not None:
                                 old_parent.children = []
                                 self.root.parent = None
-                            self.root.board = bitboard
                             break
                     if found == False:
                         self.root = Node(self.colour, None, None, bitboard, self.colour)
